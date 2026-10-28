@@ -18,6 +18,7 @@ const ICONS = {
   down: 'M6 9l6 6 6-6',
   x: 'M6 6l12 12M18 6 6 18',
   upload: 'M12 16V4M7 9l5-5 5 5M4 16v4h16v-4',
+  download: 'M12 4v12M7 11l5 5 5-5M4 16v4h16v-4',
   file: 'M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h4',
   alert: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 7.5v5.5M12 16.5h.01',
   ok: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM8 12.2l2.8 2.8L16.2 9',

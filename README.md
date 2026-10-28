@@ -18,6 +18,9 @@ Giao diện là trang tĩnh thuần HTML/CSS/JS, không dùng framework. Tính n
 | `src/app-more.js` | Form mẫu, thư viện trường, câu chữ, đánh giá, công cụ, tìm kiếm, điều hướng |
 | `src/analyzer.js` | **Bộ chấm tự động**: đọc HTML, nhận diện trường, chấm từng nguyên tắc (Đạt / Chưa đạt / Cần xem lại / Cần thử tay) |
 | `src/app-auto.js` | Trang Chấm tự động: nhập đường dẫn, tệp HTML, mã HTML; báo cáo; đưa vào checklist |
+| `src/export-md.js` | Xuất toàn bộ bộ chuẩn thành Markdown (`guideMarkdown()`), dùng cho nút "Tải UX_form.md" |
+| `UX_form.md` | **Bộ chuẩn dạng Markdown** để đưa vào tài liệu dự án; sinh tự động, không sửa tay |
+| `scripts/export-md.cjs` | Sinh lại `UX_form.md` từ bản build |
 | `src/samples/bad-form.html` | Form ví dụ có nhiều lỗi (dùng cho nút "Thử nhanh" và để kiểm thử) |
 | `api/fetch.js` | Hàm Vercel: đọc HTML của một đường dẫn (chế độ Nhanh) |
 | `api/render.js` | Hàm Vercel: mở trang bằng Chromium ẩn, đo cỡ chữ, vùng chạm, tương phản, bố cục, focus, chụp màn hình (chế độ Đầy đủ) |
@@ -31,6 +34,11 @@ Giao diện là trang tĩnh thuần HTML/CSS/JS, không dùng framework. Tính n
 - Thêm/sửa nguyên tắc: `src/data-rules.js`, mảng `RULES`. Định dạng chữ: `[[code]]`, `**đậm**`, `%%nghiêng%%`, `{V3}` (liên kết tới nguyên tắc V3), `[chữ](#hash)`.
 - Thêm câu chữ mẫu: `src/data-content.js`, mảng `COPY`.
 - Thêm kịch bản kiểm thử: `src/data-content.js`, mảng `TESTS`.
+- Sửa nội dung xong, sinh lại tệp Markdown để hai bản luôn khớp (cần Playwright):
+
+```bash
+bash build.sh && node scripts/export-md.cjs && bash build.sh
+```
 
 ## Chạy thử trên máy
 

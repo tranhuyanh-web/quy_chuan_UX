@@ -14,7 +14,7 @@ OUT=dist/chuan-ux-form.html
   echo '"use strict";'
   cat src/util.js src/data-rules.js src/data-content.js src/engine.js src/app-views.js src/analyzer.js
   node -e "process.stdout.write('const SAMPLE_BAD_HTML = ' + JSON.stringify(require('fs').readFileSync('src/samples/bad-form.html', 'utf8')).replace(/<\\//g, '<\\\\/') + ';\\n')"
-  cat src/app-auto.js src/app-more.js
+  cat src/app-auto.js src/export-md.js src/app-more.js
   echo '</script>'
 } > "$OUT"
 {
@@ -41,9 +41,11 @@ FAVICON="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0
   echo '"use strict";'
   cat src/util.js src/data-rules.js src/data-content.js src/engine.js src/app-views.js src/analyzer.js
   node -e "process.stdout.write('const SAMPLE_BAD_HTML = ' + JSON.stringify(require('fs').readFileSync('src/samples/bad-form.html', 'utf8')).replace(/<\\//g, '<\\\\/') + ';\\n')"
-  cat src/app-auto.js src/app-more.js
+  cat src/app-auto.js src/export-md.js src/app-more.js
   echo '</script>'
   echo '</body></html>'
 } > site/index.html
 mkdir -p site/samples && cp src/samples/*.html site/samples/
+# Bộ chuẩn dạng Markdown (sinh bằng: node scripts/export-md.cjs)
+[ -f UX_form.md ] && cp UX_form.md site/UX_form.md
 wc -c "$OUT" site/index.html

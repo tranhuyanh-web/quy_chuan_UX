@@ -198,7 +198,8 @@ function ruleMatches(r, q) {
 function viewRules(main) {
   const f = S.rf;
   main.innerHTML = `<div class="view">
-    <div class="page-head"><p class="eyebrow">Thư viện</p><h1 class="h1">Nguyên tắc</h1><p class="lead">${RULES.length} nguyên tắc chia theo ${CATS.length} nhóm. Mỗi nguyên tắc có lý do, cách làm, ví dụ Nên/Không nên, nhiều cái có demo chạy thật.</p></div>
+    <div class="page-head"><p class="eyebrow">Thư viện</p><h1 class="h1">Nguyên tắc</h1><p class="lead">${RULES.length} nguyên tắc chia theo ${CATS.length} nhóm. Mỗi nguyên tắc có lý do, cách làm, ví dụ Nên/Không nên, nhiều cái có demo chạy thật.</p>
+      <div class="btn-row" style="margin-top:14px"><button type="button" class="btn btn-sec btn-sm" id="rf-md">${ic('download', 15)}Tải UX_form.md</button><span class="muted" style="font-size:13.5px">Toàn bộ bộ chuẩn trong một tệp Markdown để đưa vào tài liệu dự án</span></div></div>
     <div class="filters" role="search">
       <div class="filter-row">
         <div class="search-in"><label class="vh" for="rf-q">Lọc nguyên tắc</label>${ic('search', 18)}<input id="rf-q" type="search" value="${esc(f.q)}" placeholder="Lọc theo từ khóa: lỗi, tệp, ngày sinh, mobile…" autocomplete="off" enterkeyhint="search"><button type="button" class="icon-btn clear" id="rf-clear" aria-label="Xóa từ khóa" ${f.q ? '' : 'hidden'}>${ic('x', 18)}</button></div>
@@ -234,6 +235,7 @@ function viewRules(main) {
   draw();
   const qIn = $('#rf-q');
   qIn.addEventListener('input', debounce(() => { f.q = qIn.value; draw(); }, 120));
+  $('#rf-md').addEventListener('click', downloadGuideMd);
   $('#rf-clear').addEventListener('click', () => { f.q = ''; qIn.value = ''; draw(); qIn.focus(); });
   $('#rf-demo').addEventListener('change', (e) => { f.demo = e.target.checked; draw(); });
   $('#rf-lv').addEventListener('click', (e) => { const b = e.target.closest('[data-lv]'); if (b) { f.lv = b.dataset.lv; draw(); $(`#rf-lv [data-lv="${f.lv}"]`).focus(); } });
