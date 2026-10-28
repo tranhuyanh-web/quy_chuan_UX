@@ -382,7 +382,12 @@ function azAnalyzePage(html, opt = {}) {
   };
   const names = (fs, extra) => fs.map((f) => azName(f) + (extra ? extra(f) : ''));
   const of = (...kinds) => fields.filter((f) => kinds.includes(f.kind));
-  const bodyText = azClean((doc.body || doc.documentElement).textContent);
+  /* Chữ của trang: bỏ style/script, chèn khoảng trắng giữa các nút chữ để câu không dính nhau */
+  const bodyText = (() => {
+    const out = [], w = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) { const pe = w.currentNode.parentElement; if (pe && pe.closest('script, style, noscript, template, fx-script')) continue; const t = w.currentNode.textContent.trim(); if (t) out.push(t); }
+    return azClean(out.join(' '));
+  })();
   const T = fold(bodyText);
   const css = Array.from(doc.querySelectorAll('style')).map((s) => s.textContent).join('\n') + '\n' + Array.from(doc.querySelectorAll('[style]')).map((e) => e.getAttribute('style')).join(';');
   const buttons = Array.from(doc.querySelectorAll('button, input[type=submit], input[type=button], input[type=reset], input[type=image], [role=button]')).filter((b) => !azHidden(b));
@@ -399,6 +404,11 @@ function azAnalyzePage(html, opt = {}) {
     || (!N && info.iframes.some((s) => /captcha-delivery|px-captcha|perimeterx|challenges\.cloudflare|hcaptcha\.com\/captcha|recaptcha\/api2\/bframe/i.test(s)))
     || (!N && /^(403|429|503)$/.test(String(opt.status || '')))) info.blocked = true;
   if (opt.status >= 400) info.httpStatus = opt.status;
+  /* Form đã đóng nhận hồ sơ (Google Forms "không còn nhận phản hồi", trang báo hết hạn) */
+  if (!N) {
+    const mClosed = bodyText.match(/[^.!\n]{0,80}(không còn (nhận|chấp nhận) (phản hồi|câu trả lời|hồ sơ|đăng ký)|no longer accepting responses|(đã )?hết (thời )?hạn (đăng ký|nhận hồ sơ|nộp)|đã (đóng|kết thúc) (cổng )?(đăng ký|nhận hồ sơ)|cổng đăng ký (đã )?đóng|registration (is )?closed)[^.!\n]{0,80}/i);
+    if (mClosed) info.closed = azCut(mClosed[0], 160);
+  }
   /* Ngôn ngữ trang: các tiêu chí câu chữ được viết cho tiếng Việt */
   const vnChars = (bodyText.match(/[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/gi) || []).length;
   const langAttr = (doc.documentElement.getAttribute('lang') || '').toLowerCase();

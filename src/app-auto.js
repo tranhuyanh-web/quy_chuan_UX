@@ -220,7 +220,7 @@ function azFinish(pages, meta) {
   const fields = steps.flatMap((s) => s.fields.map((f) => ({ step: steps.length > 1 ? s.n : 0, n: f.gn, kind: f.kind, type: f.type, im: f.im, ac: f.ac, req: f.req, issues: f.probs.map((x) => x.id) })));
   const info = {
     title: (pages.find((p, i) => steps[i].kind !== 'landing') || pages[0]).info.title, N: fields.length, forms: pages.reduce((a, p) => a + p.info.forms, 0), steps: pages.length,
-    formSteps: steps.filter((s) => s.kind !== 'landing').length, blocked: pages.some((p) => p.info.blocked), http: pages[0].info.httpStatus || 0, vi: pages.some((p) => p.info.vi),
+    formSteps: steps.filter((s) => s.kind !== 'landing').length, blocked: pages.some((p) => p.info.blocked), closed: (pages.find((p) => p.info.closed) || { info: {} }).info.closed || '', http: pages[0].info.httpStatus || 0, vi: pages.some((p) => p.info.vi),
     iframes: meta.mode === 'render' ? [] : pages.flatMap((p) => p.info.iframes).filter((x) => AZ_IFRAME_FORM.test(x) && !AZ_IFRAME_SKIP.test(x)).slice(0, 3),
   };
   const rep = { v: 2, R, fields, steps, info, meta: { ...meta, steps: undefined, ts: Date.now() } };
@@ -262,7 +262,7 @@ function azFlowHTML(rep) {
   const st = meta.stop ? (AZ_STOP[meta.stop.kind] || AZ_STOP.end)(meta.stop) : null;
   const pr = meta.probe;
   const prLine = pr ? (pr.advanced ? `Đã thử bấm "${pr.clicked}" khi để trống: form vẫn chuyển bước.` : `Đã thử bấm "${pr.clicked}" khi để trống: ${pr.dialogs ? 'form báo lỗi bằng hộp thoại của trình duyệt' : pr.n ? `form hiện ${pr.n} câu lỗi${pr.summary ? ', có tóm tắt lỗi' : ', không có tóm tắt lỗi'}` : pr.native ? 'chỉ có bong bóng báo lỗi của trình duyệt' : 'không thấy báo lỗi'}.`) : '';
-  if (steps.length < 2 && !st && !prLine) return '';
+  if (!rep.info.N || (steps.length < 2 && !st && !prLine)) return '';
   return `<div class="az-flow ${st && !st.ok ? 'part' : 'ok'}">
     ${st ? `<p class="az-flow-h">${ic(st.ok ? 'ok' : 'alert', 18)}<span><b>${esc(st.t)}</b>${st.d ? ` ${esc(st.d)}` : ''}</span></p>` : ''}
     <ol class="az-flow-steps">${steps.map((x, i) => { const bad = x.fields.filter((f) => ['fail', 'warn'].includes(azWorst(f))).length; return `<li><button type="button" data-azstep="${x.n}"><b>${labels[i]}</b><span>${x.kind === 'landing' && !x.fields.length ? 'không có ô nhập' : `${x.fields.length} trường${bad ? ` · ${bad} cần sửa` : ''}`}</span></button></li>`; }).join('')}${st && !st.ok ? `<li class="az-flow-stop">${ic('x', 14)}Chưa đọc được</li>` : ''}</ol>
@@ -274,6 +274,7 @@ function azDrawReport(rep) {
   const { R, info, meta } = rep;
   const s = azSummary(R);
   const verdict = !info.N && info.blocked ? { k: 'none', ic: 'alert', t: 'Trang chặn trình duyệt tự động', d: `Website trả về màn hình chống bot/CAPTCHA${info.http ? ` (mã ${info.http})` : ''} nên máy không thấy form. Mở trang bằng trình duyệt của bạn, lưu thành tệp (Ctrl+S, chọn "Trang web, toàn bộ" hoặc .mhtml) rồi dùng mục "Tệp HTML".` }
+    : !info.N && info.closed ? { k: 'none', ic: 'clock', t: 'Form đã đóng, không còn nhận đăng ký', d: `Trang hiển thị: "${info.closed}". Không còn ô nhập nào để chấm. Muốn chấm, hãy mở lại form tạm thời hoặc chấm một bản sao.` }
     : !info.N && info.http ? { k: 'none', ic: 'alert', t: `Trang trả về lỗi ${info.http}`, d: info.http === 404 ? 'Không tìm thấy trang. Kiểm tra lại đường dẫn.' : info.http === 401 || info.http === 403 ? 'Trang cần đăng nhập hoặc không cho truy cập từ bên ngoài. Hãy lưu trang thành tệp HTML rồi tải lên.' : 'Máy chủ của trang đang lỗi. Thử lại sau, hoặc lưu trang thành tệp HTML rồi tải lên.' }
     : !info.N ? { k: 'none', ic: 'info', t: 'Không tìm thấy trường nhập liệu nào', d: info.blocked ? 'Trang trả về màn hình chống bot hoặc yêu cầu xác minh. Hãy lưu trang thành tệp HTML rồi tải lên.' : 'Form có thể được tạo bằng JavaScript (thử chế độ Đầy đủ), nằm trong iframe, hoặc cần đăng nhập. Bạn cũng có thể lưu trang thành tệp HTML rồi tải lên.' }
       : s.mustFail ? { k: 'bad', ic: 'alert', t: `Chưa đạt chuẩn: ${s.mustFail} tiêu chí Bắt buộc chưa đạt`, d: 'Sửa các mục "Chưa đạt" mức Bắt buộc trước khi ra mắt.' }
