@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     const viewport = { width: 1280, height: 900, deviceScaleFactor: 1 };
     browser = await puppeteer.launch(local
       ? { executablePath: local, headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'], defaultViewport: viewport }
-      : { args: puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }), executablePath: await chromium.executablePath(), headless: 'shell', defaultViewport: viewport });
+      : { args: chromium.args, executablePath: await chromium.executablePath(), headless: 'shell', defaultViewport: viewport });
     const page = await browser.newPage();
     await page.setUserAgent(UA_DESKTOP);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.6' });
