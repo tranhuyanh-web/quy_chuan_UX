@@ -1,0 +1,11 @@
+{
+  "name": "chuan-ux-form",
+  "private": true,
+  "type": "module",
+  "description": "Chuẩn UX Form Đăng ký — trang tĩnh + hàm Vercel cho chấm điểm tự động",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@sparticuz/chromium": "153.0.0",
+    "puppeteer-core": "25.11.0"
+  }
+}

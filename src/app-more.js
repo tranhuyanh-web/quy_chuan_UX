@@ -570,7 +570,7 @@ function viewAudit(main, tab) {
         <div class="f-field"><label class="f-label" for="au-who">Người đánh giá <span class="f-opt">(không bắt buộc)</span></label><input class="f-input" id="au-who" autocomplete="name" value="${esc(S.audit.who)}"></div>
       </div>
     </div>
-    <nav class="subtabs" aria-label="Loại đánh giá"><a href="#danh-gia" ${tab === 'list' ? 'aria-current="page"' : ''}>${ic('check', 16)}Checklist nguyên tắc</a><a href="#kiem-thu" ${tab === 'tests' ? 'aria-current="page"' : ''}>${ic('target', 16)}Kịch bản kiểm thử <span class="nav-count" style="margin-left:0">${TESTS.length}</span></a></nav>
+    <nav class="subtabs" aria-label="Loại đánh giá"><a href="#cham-tu-dong">${ic('spark', 16)}Chấm tự động</a><a href="#danh-gia" ${tab === 'list' ? 'aria-current="page"' : ''}>${ic('check', 16)}Checklist nguyên tắc</a><a href="#kiem-thu" ${tab === 'tests' ? 'aria-current="page"' : ''}>${ic('target', 16)}Kịch bản kiểm thử <span class="nav-count" style="margin-left:0">${TESTS.length}</span></a></nav>
     <div id="au-body"></div>
   </div>`;
   const nm = $('#au-name'), who = $('#au-who');
@@ -880,6 +880,7 @@ function buildIndex() {
   const idx = [];
   NAV.forEach((n) => idx.push({ g: 'Trang', t: n.n, s: '', href: '#' + n.h, badge: ic(n.ic, 16) }));
   idx.push({ g: 'Trang', t: 'Kịch bản kiểm thử', s: 'Thử như người dùng thật', href: '#kiem-thu', badge: ic('target', 16) });
+  idx.push({ g: 'Trang', t: 'Chấm tự động từ link hoặc tệp HTML', s: 'Đánh giá form tự động theo bộ nguyên tắc', href: '#cham-tu-dong', badge: ic('spark', 16) });
   idx.push({ g: 'Trang', t: 'Một trang hay nhiều bước?', s: 'Công cụ', href: '#cong-cu-mo-hinh', badge: ic('branch', 16) });
   idx.push({ g: 'Trang', t: 'Có nên hỏi trường này?', s: 'Công cụ', href: '#cong-cu-truong', badge: ic('scissors', 16) });
   idx.push({ g: 'Trang', t: 'Đo lường hiệu quả form', s: 'Chỉ số, sự kiện tracking, phễu', href: '#cong-cu-do-luong', badge: ic('chart', 16) });
@@ -993,6 +994,7 @@ function route() {
   else if (h === 'truong') { key = h; run = viewFields; }
   else if (h === 'cau-chu') { key = h; run = viewCopy; }
   else if (h === 'danh-gia') { key = h; run = (m) => viewAudit(m, 'list'); }
+  else if (h === 'cham-tu-dong') { key = h; run = viewAuto; }
   else viewId = 'tong-quan';
   closePop(false); closeDialog();
   const sameView = viewId === 'form-mau' && _lastView === 'form-mau';

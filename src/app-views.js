@@ -22,6 +22,7 @@ const NAV = [
   { h: 'form-mau', n: 'Form mẫu', ic: 'form' },
   { h: 'truong', n: 'Thư viện trường', ic: 'field' },
   { h: 'cau-chu', n: 'Câu chữ mẫu', ic: 'quote' },
+  { h: 'cham-tu-dong', n: 'Chấm tự động', ic: 'spark' },
   { h: 'danh-gia', n: 'Đánh giá form', ic: 'check' },
   { h: 'cong-cu', n: 'Công cụ', ic: 'tool' },
 ];
@@ -87,7 +88,7 @@ function viewHome(main) {
         <div class="btn-row">
           <a class="btn btn-pri" href="#nguyen-tac">${ic('book', 18)}Xem nguyên tắc</a>
           <a class="btn btn-sec" href="#form-mau">${ic('play', 16)}Thử form mẫu</a>
-          <a class="btn btn-ghost" href="#danh-gia">Đánh giá form của tôi ${ic('right', 16)}</a>
+          <a class="btn btn-ghost" href="#cham-tu-dong">${ic('spark', 16)}Chấm form của tôi ${ic('right', 16)}</a>
         </div>
         <div class="hero-stats"><span><b>${RULES.length}</b>nguyên tắc</span><span><b>${demoCount}</b>demo chạy thật</span><span><b>${FIELD_LIB.length}</b>mẫu trường</span><span><b>${copyCount}</b>mẫu câu</span><span><b>${TESTS.length}</b>kịch bản kiểm thử</span></div>
       </div>
@@ -124,7 +125,7 @@ function viewHome(main) {
         ${taskCard('#form-mau', 'play', 'Xem một form chuẩn', 'Form đăng ký dự thi hoàn chỉnh, bật chú thích để thấy từng nguyên tắc nằm ở đâu.', 'Form mẫu')}
         ${taskCard('#cong-cu', 'layers', 'Thiết kế form mới', 'Chọn loại form, nhận sẵn cấu trúc các bước, trường nào bắt buộc, trường nào hỏi sau.', 'Bản mẫu cấu trúc')}
         ${taskCard('#cong-cu-truong', 'scissors', 'Cắt bớt trường thừa', 'Rà từng trường bằng 4 câu hỏi: ai dùng, để làm gì, cần ngay không, suy ra được không.', 'Có nên hỏi trường này?')}
-        ${taskCard('#danh-gia', 'check', 'Review một form có sẵn', `Chấm ${RULES.length} tiêu chí, ghi chú chỗ chưa đạt, xuất báo cáo dán vào Jira/Slack.`, 'Đánh giá form')}
+        ${taskCard('#cham-tu-dong', 'spark', 'Review một form có sẵn', `Dán link hoặc tải HTML: máy chấm theo ${RULES.length} tiêu chí, chỉ ra chỗ chưa đạt kèm bằng chứng, rồi đưa vào checklist.`, 'Chấm tự động')}
         ${taskCard('#cau-chu', 'quote', 'Viết lỗi, nhãn, nút', `${copyCount} mẫu câu tiếng Việt theo tình huống, sao chép một chạm.`, 'Câu chữ mẫu')}
         ${taskCard('#truong', 'field', 'Bàn giao cho dev', 'Thông số từng trường: type, inputmode, autocomplete, kiểm tra, lỗi, mã HTML.', 'Thư viện trường')}
         ${taskCard('#cong-cu-do-luong', 'chart', 'Đo sau khi ra mắt', '11 chỉ số đầu vào và đầu ra, danh sách sự kiện tracking, cách đọc phễu để tìm bước rò rỉ.', 'Đo lường hiệu quả')}

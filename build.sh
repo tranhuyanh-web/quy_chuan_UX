@@ -12,7 +12,9 @@ OUT=dist/chuan-ux-form.html
   cat src/body.html
   echo '<script>'
   echo '"use strict";'
-  cat src/util.js src/data-rules.js src/data-content.js src/engine.js src/app-views.js src/app-more.js
+  cat src/util.js src/data-rules.js src/data-content.js src/engine.js src/app-views.js src/analyzer.js
+  node -e "process.stdout.write('const SAMPLE_BAD_HTML = ' + JSON.stringify(require('fs').readFileSync('src/samples/bad-form.html', 'utf8')).replace(/<\\//g, '<\\\\/') + ';\\n')"
+  cat src/app-auto.js src/app-more.js
   echo '</script>'
 } > "$OUT"
 {
@@ -37,8 +39,11 @@ FAVICON="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0
   cat src/body.html
   echo '<script>'
   echo '"use strict";'
-  cat src/util.js src/data-rules.js src/data-content.js src/engine.js src/app-views.js src/app-more.js
+  cat src/util.js src/data-rules.js src/data-content.js src/engine.js src/app-views.js src/analyzer.js
+  node -e "process.stdout.write('const SAMPLE_BAD_HTML = ' + JSON.stringify(require('fs').readFileSync('src/samples/bad-form.html', 'utf8')).replace(/<\\//g, '<\\\\/') + ';\\n')"
+  cat src/app-auto.js src/app-more.js
   echo '</script>'
   echo '</body></html>'
 } > site/index.html
+mkdir -p site/samples && cp src/samples/*.html site/samples/
 wc -c "$OUT" site/index.html

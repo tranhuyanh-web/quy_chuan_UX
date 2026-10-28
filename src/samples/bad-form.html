@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Đăng ký tham gia cuộc thi (ví dụ có lỗi)</title>
+<style>
+  body{font-family:Arial;font-size:13px;color:#777;background:#fff}
+  input,select,textarea{font-size:13px;height:28px;border:1px solid #e3e3e3;outline:none}
+  .row{display:flex;gap:12px}.row>div{flex:1}
+  button{height:30px}
+</style>
+<script src="https://www.google.com/recaptcha/api.js" async defer></script>
+</head>
+<body>
+<h1>ĐĂNG KÝ THAM GIA CUỘC THI</h1>
+<p>Hạn: 30/11</p>
+<form action="/submit" method="post" autocomplete="off">
+  <div class="row">
+    <div><input type="text" name="ho" placeholder="Họ"></div>
+    <div><input type="text" name="ten" placeholder="Tên" maxlength="20" pattern="[A-Za-z ]+"></div>
+  </div>
+  <div class="row">
+    <div><label>SỐ ĐIỆN THOẠI</label><input type="number" name="sdt" maxlength="10" pattern="0[0-9]{9}" required></div>
+    <div><label>Ngày Sinh</label><input type="date" name="ngaysinh" required></div>
+  </div>
+  <label>Email</label>
+  <input type="text" name="email" required>
+  <label>Nhập lại email</label>
+  <input type="text" name="email_confirm" onpaste="return false" required>
+  <label>Giới tính</label>
+  <select name="gioitinh"><option>-- Chọn --</option><option>Nam</option><option>Nữ</option></select>
+  <label>Số CMND</label>
+  <input type="number" name="cmnd">
+  <label>Thu nhập hàng tháng</label>
+  <input type="text" name="thunhap">
+  <label>Tỉnh/Thành phố</label>
+  <select name="tinh"><option>-- Chọn tỉnh --</option><option>Hà Nội</option><option>Hà Giang</option><option>Bình Dương</option><option>TP. Hồ Chí Minh</option><option>Quảng Nam</option><option>Đà Nẵng</option></select>
+  <label>Quận/Huyện</label>
+  <select name="quanhuyen"><option>-- Chọn quận/huyện --</option></select>
+  <label>Mật khẩu</label>
+  <input type="password" name="pass">
+  <label>Nhập lại mật khẩu</label>
+  <input type="password" name="pass2" onpaste="return false">
+  <label>Mô tả ý tưởng</label>
+  <textarea name="mota" maxlength="500"></textarea>
+  <label>File bài thi</label>
+  <input type="file" name="baithi">
+  <div class="g-recaptcha" data-sitekey="ví-dụ"></div>
+  <label><input type="checkbox" name="dongy" checked> Tôi đồng ý với điều khoản sử dụng và nhận thông tin khuyến mãi từ đối tác</label>
+  <div>
+    <button type="submit" disabled>Submit</button>
+    <button type="reset">Nhập lại</button>
+  </div>
+</form>
+</body>
+</html>

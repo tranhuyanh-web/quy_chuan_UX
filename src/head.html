@@ -709,6 +709,64 @@ details.more summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--a
 .kpi-f code{font-size:12.5px;line-height:1.6;white-space:normal;display:inline}
 .kpi-w{font-size:14px;color:var(--ink-2)}
 
+/* ---------- Chấm tự động ---------- */
+.az-input{grid-template-columns:minmax(0,1fr);padding:20px;border:1px solid var(--line);border-radius:16px;background:var(--surface);margin-bottom:28px;display:grid;gap:18px}
+.az-src{width:fit-content}
+.az-paste{min-height:180px;font:13px/1.5 var(--f-mono)}
+.az-filelist{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px}
+.az-filelist:empty{display:none}
+.az-filelist li{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--field);font-size:14.5px}
+.az-fn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.rot90{transform:rotate(90deg)}
+.az-progress{padding:14px 16px;border-radius:12px;background:var(--bg)}
+.az-steps{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:14.5px}
+.az-steps li{display:flex;align-items:center;gap:10px;color:var(--muted)}
+.az-steps li.cur{color:var(--ink);font-weight:600}
+.az-steps li.done{color:var(--ok)}
+.az-steps .spin{width:16px;height:16px;border-width:2px;color:var(--accent)}
+.az-dot{width:16px;height:16px;border-radius:50%;border:2px solid var(--line-strong);flex:none}
+.az-empty{display:flex;gap:16px;align-items:flex-start;padding:24px;border:1px dashed var(--line-strong);border-radius:16px;color:var(--ink-2)}
+.az-empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+.az-empty p{max-width:66ch;font-size:14.5px}
+.az-empty-ic{width:48px;height:48px;border-radius:12px;background:var(--mark-soft);color:var(--warn);display:grid;place-items:center;flex:none}
+.az-rep{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;scroll-margin-top:calc(var(--hdr) + 60px)}
+.az-top{display:flex;gap:20px;align-items:flex-start}
+.az-shot{width:150px;max-width:34%;aspect-ratio:390/844;object-fit:cover;object-position:top;border-radius:14px;border:6px solid var(--ink);flex:none;background:var(--surface-2)}
+.az-meta{display:grid;gap:8px;min-width:0}
+.az-meta h2{outline:none;overflow-wrap:anywhere}
+.az-src{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.az-nums{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:640px){.az-nums{grid-template-columns:repeat(3,minmax(0,1fr))}.az-top{flex-direction:column}.az-shot{width:120px;max-width:40%}}
+.au-num.warnn b{color:var(--warn)}
+.meter .m-warn{background:var(--warn)}
+.az-items{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.az-item{display:grid;grid-template-columns:132px minmax(0,1fr);gap:6px 16px;padding:14px 4px;border-bottom:1px solid var(--line)}
+.az-st{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;font:700 12.5px var(--f-body);width:fit-content;white-space:nowrap}
+.st-fail .az-st{background:var(--err-soft);color:var(--err)}
+.st-warn .az-st{background:var(--warn-soft);color:var(--warn)}
+.st-pass .az-st{background:var(--ok-soft);color:var(--ok)}
+.st-manual .az-st{background:var(--accent-soft);color:var(--accent)}
+.st-na .az-st{background:var(--surface-2);color:var(--muted)}
+.az-body{display:grid;gap:6px;min-width:0}
+.az-t{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-weight:600;font-size:15.5px}
+.az-t a:not(.rid){color:var(--ink);text-decoration:none}
+.az-t a:not(.rid):hover{color:var(--accent);text-decoration:underline}
+.az-t .rid{text-decoration:none}
+.az-msg{font-size:14.5px;color:var(--ink-2)}
+.az-ev{margin:0;padding-left:20px;display:grid;gap:3px;font-size:14px;color:var(--ink)}
+.az-ev li{overflow-wrap:anywhere}
+.az-fix{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--muted)}
+.az-fix .ic{margin-top:2px;flex:none}
+@media (max-width:640px){.az-item{grid-template-columns:minmax(0,1fr)}}
+.az-fields{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:4px 16px 16px}
+.az-fields>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0}
+.az-fields>summary::-webkit-details-marker{display:none}
+.az-fields>summary h3{font-size:16px}
+.az-fields[open]>summary .chev{transform:rotate(180deg)}
+.az-limit{font-size:13.5px;display:flex;gap:8px;align-items:flex-start}
+.az-limit .ic{margin-top:3px}
+.az-confirm{background:var(--accent-soft)}
+
 /* ---------- Minh họa tĩnh ---------- */
 .mk{font-size:13px;line-height:1.45;color:var(--ink)}
 .mk-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px}
