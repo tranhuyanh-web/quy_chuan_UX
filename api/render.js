@@ -127,10 +127,11 @@ function pageInfo() {
 
 /* Bản chụp HTML gọn: bỏ nội dung script nội tuyến, ảnh base64, ruột SVG, chú thích */
 function snapshot() {
+  /* Không gán textContent/innerHTML: trang bật Trusted Types (Google Forms…) sẽ chặn */
   const root = document.documentElement.cloneNode(true);
-  root.querySelectorAll('script').forEach((s) => { s.textContent = ''; });
+  root.querySelectorAll('script').forEach((s) => { const x = document.createElement('fx-script'); if (s.getAttribute('src')) x.setAttribute('src', s.getAttribute('src')); s.replaceWith(x); });
   root.querySelectorAll('noscript, template').forEach((s) => s.remove());
-  root.querySelectorAll('svg').forEach((s) => { s.innerHTML = ''; });
+  root.querySelectorAll('svg').forEach((s) => { while (s.firstChild) s.firstChild.remove(); });
   root.querySelectorAll('img[src^="data:"], source[srcset^="data:"]').forEach((i) => { i.setAttribute('src', ''); i.removeAttribute('srcset'); });
   const w = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT); const cm = [];
   while (w.nextNode()) cm.push(w.currentNode);

@@ -100,6 +100,26 @@ function azLabel(doc, el) {
     const pl = Array.from(par.children).find((c) => c.tagName === 'LABEL' && !c.getAttribute('for') && !c.querySelector('input,select,textarea'));
     if (pl && azOwnText(pl)) return { text: azOwnText(pl), src: 'orphan', node: pl };
   }
+  /* Nhãn hiển thị ngay trước khối chứa ô nhưng gắn sai: thiếu for, hoặc for trỏ tới id không có / ô ẩn
+     (hay gặp ở component React: <label for="phone"> nhưng ô thật không có id, id="phone" là ô hidden) */
+  for (let b = el.parentElement, k = 0; b && k < 8; b = b.parentElement, k++) {
+    const kids = Array.from(b.children);
+    const idx = kids.findIndex((c) => c.contains(el));
+    let found = null;
+    for (let j = idx - 1; j >= 0; j--) {
+      const c = kids[j];
+      if (c.tagName === 'LABEL') { found = c; break; }
+      if (c.querySelector('input:not([type=hidden]),select,textarea')) break;
+    }
+    if (found) {
+      const fr = found.getAttribute('for'), tg = fr ? doc.getElementById(fr) : null;
+      const bad = !fr || !tg || tg === el ? !tg || !fr : (tg.getAttribute('type') || '').toLowerCase() === 'hidden' || tg.getAttribute('data-fx-vis') === '0';
+      if (bad && azOwnText(found)) return { text: azOwnText(found), src: 'orphan', node: found };
+      break;
+    }
+    const vis = Array.from(b.querySelectorAll('input:not([type=hidden]),select,textarea')).filter((c) => c.getAttribute('data-fx-vis') !== '0');
+    if (vis.length > 1) break;
+  }
   if (el.getAttribute('aria-label')) return { text: azClean(el.getAttribute('aria-label')), src: 'aria' };
   if (el.getAttribute('title')) return { text: azClean(el.getAttribute('title')), src: 'title' };
   if (el.getAttribute('placeholder')) return { text: azClean(el.getAttribute('placeholder')), src: 'placeholder' };
@@ -154,6 +174,8 @@ function azKindOf(f) {
   if (/^ten$|first ?name|given ?name/.test(lab) || /^(ten|firstname|givenname)$/.test(nmF) || /given-name/.test(f.ac)) return 'firstname';
   if (/ho (va )?ten|ho ten|full ?name|fullname|your name|^name$|\bname\b|\bten\b/.test(t) && !/ten (truong|don vi|doi|y tuong|tac pham|cong ty|du an|nhom|san pham|bai)/.test(t)) return 'name';
   if (/truong|school|university|dai hoc|don vi|co quan|cong ty|organization|to chuc/.test(t)) return 'school';
+  if (f.type === 'tel') return 'phone';
+  if (f.type === 'email') return 'email';
   if (f.type === 'url' || /link|duong dan|url|website|portfolio|facebook/.test(t)) return 'url';
   if (f.tag === 'textarea') return 'longtext';
   if (f.type === 'radio' || f.tag === 'select' || f.type === 'select') return 'choice';
@@ -912,7 +934,8 @@ function azAnalyzePage(html, opt = {}) {
 
   /* ===== P · Tin cậy ===== */
   const links = Array.from(doc.querySelectorAll('a')).map((a) => fold(a.textContent + ' ' + (a.getAttribute('href') || '')));
-  if (links.some((l) => /chinh sach (bao mat|quyen rieng tu|du lieu)|privacy|bao mat thong tin|bao ve du lieu/.test(l)) || /chinh sach bao mat|chinh sach quyen rieng tu/.test(T)) put('P1', 'pass', 'Có liên kết chính sách bảo mật.');
+  const PRIV = /(chinh sach|quy dinh|dieu khoan|thong bao|cam ket) (ve )?(bao mat|quyen rieng tu|rieng tu|bao ve du lieu|du lieu ca nhan|xu ly du lieu)|privacy|bao mat thong tin|bao ve du lieu ca nhan/;
+  if (links.some((l) => PRIV.test(l)) || /chinh sach bao mat|chinh sach quyen rieng tu|quy dinh bao mat/.test(T)) put('P1', 'pass', 'Có liên kết chính sách bảo mật.');
   else put('P1', 'fail', 'Không thấy liên kết chính sách bảo mật hay mục đích thu thập dữ liệu.');
   const contact = /[\w.+-]+@[\w-]+\.[\w.]+/.test(bodyText) || /hotline|tong dai|ho tro|lien he/.test(T) && /\d{4}[\s.]?\d{3,4}/.test(bodyText);
   const http = opt.url && /^http:/i.test(opt.url);
