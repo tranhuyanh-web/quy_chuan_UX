@@ -52,10 +52,17 @@ Mở http://127.0.0.1:3000. `FX_ALLOW_PRIVATE=1` cho phép chấm các trang ch�
 
 ## Chấm tự động hoạt động thế nào
 
-- **Đường dẫn, chế độ Đầy đủ:** `api/render` mở trang bằng Chromium ở khung máy tính (1280px) để đo bố cục cột, rồi khung điện thoại (390px) để đo cỡ chữ, vùng chạm, tương phản, thử phím Tab và chụp màn hình. Nếu không mở được, trang tự chuyển sang chế độ Nhanh.
+- **Đường dẫn, chế độ Đầy đủ** (`api/render`, Chromium ẩn):
+  1. Mở trang, chờ tới khi số ô nhập ổn định (không chờ mạng "im lặng" vì trang có reCAPTCHA, analytics không bao giờ im), cuộn hết trang để nạp phần tải chậm.
+  2. Không thấy form: tìm khung nhúng (iframe) có form và mở thẳng khung đó; hoặc bấm nút "Đăng ký ngay / Tham gia / Nộp hồ sơ" của trang giới thiệu.
+  3. Bước đầu: bấm "Tiếp/Gửi" khi để trống để ghi lại cách form báo lỗi (câu lỗi, vị trí, tóm tắt lỗi, aria-invalid, bong bóng trình duyệt, hộp thoại).
+  4. Điền dữ liệu thử (email `@example.com`, số điện thoại mẫu…), bấm **Tiếp** để sang bước sau; lặp tối đa 6 bước, khoảng 50 giây. **Không bao giờ bấm nút gửi cuối cùng.**
+  5. Từ lúc bấm thử đầu tiên, **chặn mọi yêu cầu gửi dữ liệu** (POST, PUT, PATCH, DELETE) nên không tạo hồ sơ, không gửi OTP. Bước sau cần gửi dữ liệu lên máy chủ thì công cụ dừng và nói rõ.
+  6. Mỗi bước: đo ở khung điện thoại 390px (cỡ chữ, vùng chạm, tương phản, phím Tab) và khung 1280px (bố cục cột), chụp toàn trang để đánh số từng ô.
 - **Đường dẫn, chế độ Nhanh:** `api/fetch` chỉ tải mã HTML, không chạy JavaScript của trang.
-- **Tệp HTML / dán mã:** phân tích ngay trên trình duyệt, không gửi đi đâu. Hỗ trợ nhiều tệp (mỗi tệp một bước) và tệp `.mhtml`.
-- Công cụ **không bao giờ bấm gửi form**. Các tiêu chí về hành vi (báo lỗi khi gõ, gửi trùng, trang xác nhận…) được đánh dấu "Cần thử tay" kèm kịch bản kiểm thử.
+- **Tệp HTML / dán mã:** phân tích ngay trên trình duyệt, không gửi đi đâu. Hỗ trợ nhiều tệp (mỗi tệp một bước) và tệp `.mhtml`. Bản xem trước đặt trong khung sandbox không chạy script.
+- **Báo cáo theo trường:** ảnh từng bước có ghim số trên từng ô; mỗi ô có thẻ "Vấn đề / Cách sửa" theo từng nguyên tắc và mã gợi ý (hiện tại → nên sửa). Vấn đề không gắn với ô nào nằm ở mục "Vấn đề chung của form". Cách xem "Theo tiêu chí" vẫn giữ danh sách 79 nguyên tắc.
+- Trang mẫu để thử: `/samples/landing` (trang giới thiệu → form 3 bước), `/samples/multi-step`, `/samples/embed` (form trong iframe), `/samples/bad-form`.
 - Biến môi trường tùy chọn `FX_TEST_TOKEN`: cho phép gọi `GET /api/render?url=…&token=…` để kiểm thử từ ngoài trình duyệt.
 
 ## Triển khai

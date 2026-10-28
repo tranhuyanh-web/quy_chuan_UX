@@ -149,8 +149,9 @@ function azKindOf(f) {
   if (/phuong\s*\/?\s*xa|phuong|\bxa\b|ward|commune|address-level2/.test(t)) return 'ward';
   if (/tinh\s*\/?\s*thanh|tinh thanh|\btinh\b|province|thanh pho|address-level1|\bcity\b/.test(t)) return 'province';
   if (/dia chi|so nha|ten duong|address|street/.test(t)) return 'address';
-  if (/^ho$|last ?name|surname|family ?name|family-name/.test(lab + ' ' + fold(f.name) + ' ' + fold(f.ac))) return 'lastname';
-  if (/^ten$|first ?name|given ?name|given-name/.test(lab + ' ' + fold(f.name) + ' ' + fold(f.ac))) return 'firstname';
+  const nmF = fold(f.name).replace(/[\s_-]+/g, '');
+  if (/^ho$|last ?name|surname|family ?name/.test(lab) || /^(ho|lastname|surname|familyname)$/.test(nmF) || /family-name/.test(f.ac)) return 'lastname';
+  if (/^ten$|first ?name|given ?name/.test(lab) || /^(ten|firstname|givenname)$/.test(nmF) || /given-name/.test(f.ac)) return 'firstname';
   if (/ho (va )?ten|ho ten|full ?name|fullname|your name|^name$|\bname\b|\bten\b/.test(t) && !/ten (truong|don vi|doi|y tuong|tac pham|cong ty|du an|nhom|san pham|bai)/.test(t)) return 'name';
   if (/truong|school|university|dai hoc|don vi|co quan|cong ty|organization|to chuc/.test(t)) return 'school';
   if (f.type === 'url' || /link|duong dan|url|website|portfolio|facebook/.test(t)) return 'url';
@@ -177,6 +178,7 @@ function azCollect(doc, metrics) {
       type = role === 'radio' ? 'radio' : role === 'checkbox' ? 'checkbox' : role === 'switch' ? 'switch' : role === 'combobox' || role === 'listbox' ? 'combobox' : 'text';
     }
     if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type)) continue;
+    if (el.getAttribute('data-fx-old') === '1') continue; /* đã chấm ở bước trước */
     const { m, d } = mOf(el);
     const hid = azHidden(el) && !(m && m.styled);
     if (hid) continue;
@@ -189,7 +191,7 @@ function azCollect(doc, metrics) {
       maxlength: el.hasAttribute('maxlength') ? +el.getAttribute('maxlength') : null, pattern: el.getAttribute('pattern') || '',
       req: el.hasAttribute('required') || el.getAttribute('aria-required') === 'true', checked: el.hasAttribute('checked') || el.getAttribute('aria-checked') === 'true',
       onpaste: /return\s+false|preventdefault/i.test((el.getAttribute('onpaste') || '') + (el.getAttribute('oncopy') || '') + (el.getAttribute('oncut') || '')) || el.getAttribute('onpaste') !== null,
-      disabled: el.hasAttribute('disabled'), ekh: el.getAttribute('enterkeyhint') || '', accept: el.getAttribute('accept') || '', m, d, issues: new Set(),
+      disabled: el.hasAttribute('disabled'), ekh: el.getAttribute('enterkeyhint') || '', accept: el.getAttribute('accept') || '', m, d, issues: new Set(), probs: [], fxi: el.getAttribute('data-fx-i'),
       form: el.closest('form'), fieldset: el.closest('fieldset'),
     };
     f.hint = azHint(doc, el, lb.node);
@@ -200,7 +202,7 @@ function azCollect(doc, metrics) {
     }
     if (type === 'radio') {
       const key = (el.getAttribute('name') || ('_' + fields.length)) + '|' + (el.closest('form') ? 'f' : '');
-      if (radios.has(key)) { const g = radios.get(key); g.group.push(f); if (f.checked) g.checked = true; continue; }
+      if (radios.has(key)) { const g = radios.get(key); g.group.push(f); f.head = g; if (f.checked) g.checked = true; continue; }
       const gl = azGroupLabel(doc, el);
       f.group = [f]; f.optLabel = f.label; f.label = gl.text || f.label; f.groupSrc = gl.src;
       radios.set(key, f);
@@ -229,6 +231,118 @@ function azGroupLabel(doc, el) {
 }
 const azName = (f) => azCut(f.label || f.ph || f.name || f.id || AZ_KIND[f.kind] || f.type, 48);
 
+/* ---------- Gợi ý sửa cho từng trường ---------- */
+const AZ_HINT = { phone: 'Ví dụ: 0912 345 678', cccd: 'Gồm 12 chữ số, in trên thẻ căn cước', otp: 'Mã gồm 6 chữ số vừa gửi tới số điện thoại của bạn', url: 'Ví dụ: behance.net/ten-ban', password: 'Ít nhất 8 ký tự', longtext: 'Tối đa 300 từ', dob: 'Ví dụ: 27 3 2007' };
+const AZ_REC = {
+  name: { type: 'text', autocomplete: 'name', autocapitalize: 'words', spellcheck: 'false' },
+  firstname: { type: 'text', autocomplete: 'name', autocapitalize: 'words', spellcheck: 'false' },
+  lastname: { type: 'text', autocomplete: 'name', autocapitalize: 'words', spellcheck: 'false' },
+  email: { type: 'email', autocomplete: 'email', spellcheck: 'false', autocapitalize: 'none' },
+  phone: { type: 'tel', inputmode: 'tel', autocomplete: 'tel' },
+  cccd: { type: 'text', inputmode: 'numeric', autocomplete: 'off' },
+  otp: { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code' },
+  password: { type: 'password', autocomplete: 'new-password' },
+  province: { autocomplete: 'address-level1' }, ward: { autocomplete: 'address-level2' },
+  address: { type: 'text', autocomplete: 'street-address' }, school: { type: 'text', autocomplete: 'organization' },
+  url: { type: 'url', inputmode: 'url', autocomplete: 'url', spellcheck: 'false', autocapitalize: 'none' },
+  age: { type: 'text', inputmode: 'numeric' }, number: { type: 'text', inputmode: 'numeric' },
+};
+const azLabText = (f) => azClean(((f.labelSrc === 'placeholder' || !f.label) ? (f.ph || AZ_KIND[f.kind] || 'Tên trường') : f.label).replace(/\s*(\(\*\)|\*)\s*$/, '').replace(/^\*\s*/, '')) || 'Tên trường';
+const azIdOf = (f) => (f.id || f.name || `truong-${f.n}`).replace(/[^\w-]/g, '-');
+const azLow = (s) => s.charAt(0).toLocaleLowerCase('vi') + s.slice(1);
+const azSentence = (s) => { const t = s.toLocaleLowerCase('vi'); return t.charAt(0).toLocaleUpperCase('vi') + t.slice(1); };
+const azIsImg = (f) => /image|jpe?g|png|anh|photo|chan dung|avatar/.test(fold(f.accept + ' ' + f.label + ' ' + f.name));
+function azErrSuggest(f) {
+  const lab = azLow(azLabText(f));
+  return ({ name: 'Nhập họ và tên', firstname: 'Nhập họ và tên', lastname: 'Nhập họ và tên', email: 'Nhập email, ví dụ: ten@gmail.com', phone: 'Nhập số điện thoại', dob: 'Nhập ngày sinh', dobPart: 'Nhập ngày sinh', cccd: 'Nhập số căn cước', province: 'Chọn tỉnh/thành phố', ward: 'Chọn phường/xã', consent: `Bạn cần đồng ý với ${lab.replace(/^tôi (đã đọc và )?đồng ý (với )?/i, '') || 'thể lệ'} để gửi hồ sơ`, file: `Tải lên ${lab}` })[f.kind]
+    || (['choice', 'gender'].includes(f.kind) || f.tag === 'select' || f.type === 'radio' ? `Chọn ${lab}` : `Nhập ${lab}`);
+}
+function azFieldRect(f) {
+  const rs = (f.group || [f]).map((g) => g.m && (g.m.vis ? (g.m.tgt && ['radio', 'checkbox'].includes(g.type) ? g.m.tgt : g.m.r) : g.m.tgt)).filter((r) => r && r.w > 0 && r.h > 0);
+  if (!rs.length) return null;
+  const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+}
+function azCurHTML(f) {
+  const KEEP = /^(id|name|type|placeholder|autocomplete|inputmode|required|maxlength|minlength|pattern|accept|multiple|for|onpaste|checked|disabled|rows|value|enterkeyhint|list|role|aria-label|aria-labelledby|aria-describedby|aria-required|aria-invalid)$/;
+  const one = (el) => {
+    const c = el.cloneNode(true);
+    c.querySelectorAll('svg, script, style, img').forEach((x) => x.remove());
+    [c, ...c.querySelectorAll('*')].forEach((n) => Array.from(n.attributes).forEach((a) => { if (!KEEP.test(a.name)) n.removeAttribute(a.name); }));
+    let h = c.outerHTML.replace(/\s{2,}/g, ' ').replace(/>\s+</g, '><');
+    if (c.tagName === 'SELECT') {
+      const n = c.querySelectorAll('option').length;
+      h = h.replace(/<option/g, '\n  <option').replace(/(\n  <option[^]*?<\/option>){4,}/, (m) => m.split('\n').slice(0, 4).join('\n') + `\n  <!-- … ${n - 3} lựa chọn nữa -->`).replace('</select>', '\n</select>');
+    }
+    return h;
+  };
+  const parts = [];
+  if (!f.group) {
+    if (f.labelNode && f.labelNode.contains(f.el)) parts.push(one(f.labelNode));
+    else { if (f.labelNode) parts.push(one(f.labelNode)); parts.push(one(f.el)); }
+  } else {
+    f.group.slice(0, 4).forEach((g) => parts.push(one(g.el.closest('label') || g.el)));
+    if (f.group.length > 4) parts.push(`<!-- … ${f.group.length - 4} lựa chọn nữa -->`);
+  }
+  /* Thẻ mở quá dài thì xuống dòng từng thuộc tính cho dễ đọc */
+  const out = parts.join('\n').replace(/<(\w+)((?:\s+[\w:-]+(?:="[^"]*")?)+)\s*>/g, (m, tag, at) => {
+    if (m.length <= 78) return m;
+    const list = at.trim().match(/[\w:-]+(?:="[^"]*")?/g) || [];
+    return `<${tag} ${list[0]}\n${list.slice(1).map((a) => ' '.repeat(tag.length + 2) + a).join('\n')}>`;
+  });
+  return out.length > 1200 ? out.slice(0, 1200) + '\n…' : out;
+}
+const azTag = (name, attrs, close = '') => {
+  const line = `<${name} ${attrs.join(' ')}>`;
+  return (line.length <= 78 ? line : `<${name} ${attrs[0]}\n${attrs.slice(1).map((a) => ' '.repeat(name.length + 2) + a).join('\n')}>`) + close;
+};
+function azRecHTML(f) {
+  if (f.kind === 'confirmEmail' || f.kind === 'confirmPassword') return '<!-- Bỏ hẳn trường này -->';
+  if (f.kind === 'district') return '<!-- Bỏ trường này: từ 01/07/2025 không còn cấp Quận/Huyện.\n     Địa chỉ gồm Tỉnh/Thành phố (34) → Phường/Xã/Đặc khu. -->';
+  const id = azIdOf(f), nm = f.name || id;
+  let lab = azLabText(f);
+  if (f.issues.has('L7')) lab = azSentence(lab);
+  if (f.issues.has('L5')) lab = lab.replace(/\b(SĐT|SDT)\b/, 'Số điện thoại').replace(/\bCMND\b/, 'Số căn cước').replace(/\bHKTT\b/, 'Địa chỉ thường trú');
+  const star = f.req ? ' <span aria-hidden="true">*</span>' : ' <span class="opt">(không bắt buộc)</span>';
+  const img = azIsImg(f);
+  const hint = f.hint || AZ_HINT[f.kind] || (f.kind === 'file' ? (img ? 'JPG hoặc PNG, tối đa 5 MB' : 'PDF, tối đa 20 MB') : '');
+  const hintP = hint ? `\n<p class="hint" id="${id}-hint">${hint}</p>` : '';
+  const desc = hint ? `aria-describedby="${id}-hint"` : '';
+  const smallSel = f.tag === 'select' && f.opts && f.opts.length && f.opts.length <= 5 && !['dobPart', 'province', 'ward', 'district'].includes(f.kind);
+  if (f.type === 'radio' || smallSel) {
+    const opts = f.type === 'radio' ? f.group.map((g) => g.optLabel || g.el.getAttribute('value') || '…') : f.opts;
+    return `<fieldset${desc ? ' ' + desc : ''}>\n  <legend>${lab}${star}</legend>${hint ? `\n  <p class="hint" id="${id}-hint">${hint}</p>` : ''}\n${opts.slice(0, 8).map((o) => `  <label><input type="radio" name="${nm}" value="${o}"> ${o}</label>`).join('\n')}\n</fieldset>`;
+  }
+  if (f.type === 'checkbox') {
+    if (f.issues.has('R2') && /khuyen mai|quang cao|nhan tin|ban tin|newsletter|marketing|uu dai|doi tac/.test(fold(f.label)))
+      return `<label><input type="checkbox" name="dong_y" required> Tôi đồng ý với Thể lệ và Chính sách bảo mật</label>\n<label><input type="checkbox" name="nhan_tin"> Tôi muốn nhận tin về các chương trình tiếp theo</label>`;
+    return `<label><input type="checkbox" id="${id}" name="${nm}"${f.req ? ' required' : ''}> ${lab}</label>`;
+  }
+  if ((f.kind === 'dob' && (f.type === 'date' || f.tag === 'select')) || (f.kind === 'dobPart' && f.issues.has('I7'))) {
+    const b = id.replace(/-(d|m|y|day|month|year)$/i, '');
+    return `<fieldset aria-describedby="${b}-hint">\n  <legend>Ngày sinh${star}</legend>\n  <p class="hint" id="${b}-hint">Ví dụ: 27 3 2007</p>\n  <label for="${b}-d">Ngày</label> <input id="${b}-d" inputmode="numeric" autocomplete="bday-day">\n  <label for="${b}-m">Tháng</label> <input id="${b}-m" inputmode="numeric" autocomplete="bday-month">\n  <label for="${b}-y">Năm</label> <input id="${b}-y" inputmode="numeric" autocomplete="bday-year">\n</fieldset>`;
+  }
+  const rec = AZ_REC[f.kind] || {};
+  const merged = f.kind === 'firstname' || f.kind === 'lastname';
+  const attrs = [`id="${merged ? 'hoten' : id}"`, `name="${merged ? 'hoten' : nm}"`];
+  if (f.tag === 'input') attrs.push(`type="${rec.type || (f.type === 'number' ? 'text' : f.type)}"`);
+  if (rec.inputmode) attrs.push(`inputmode="${rec.inputmode}"`);
+  const ac = rec.autocomplete || (f.ac && f.ac !== 'off' ? f.ac : '');
+  if (ac) attrs.push(`autocomplete="${ac}"`);
+  if (rec.autocapitalize) attrs.push(`autocapitalize="${rec.autocapitalize}"`);
+  if (rec.spellcheck) attrs.push(`spellcheck="${rec.spellcheck}"`);
+  if (f.type === 'file') attrs.push(`accept="${f.accept || (img ? 'image/jpeg,image/png' : '.pdf')}"`);
+  if (f.req) attrs.push('required');
+  if (desc) attrs.push(desc);
+  const ctl = f.tag === 'textarea' ? azTag('textarea', [...attrs, 'rows="6"'], '</textarea>') : f.tag === 'select' ? azTag('select', attrs) + '\n  …\n</select>' : azTag('input', attrs);
+  return `<label for="${merged ? 'hoten' : id}">${merged ? 'Họ và tên' : lab}${star}</label>${merged ? '' : hintP}\n${ctl}`;
+}
+const AZ_CODE_IDS = new Set(['L1', 'L2', 'L3', 'L4', 'L5', 'I1', 'I2', 'I3', 'I4', 'I6', 'I7', 'I8', 'I9', 'I10', 'U1', 'A2', 'C1', 'C3', 'C5', 'C6', 'R2', 'R3']);
+function azFixCode(f) {
+  if (!f.el || !f.probs.some((p) => AZ_CODE_IDS.has(p.id))) return null;
+  return { cur: azCurHTML(f), rec: azRecHTML(f) };
+}
+
 /* ---------- Chấm một trang ---------- */
 function azAnalyzePage(html, opt = {}) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -236,6 +350,14 @@ function azAnalyzePage(html, opt = {}) {
   const fields = azCollect(doc, metrics);
   const R = {};
   const put = (id, st, msg, ev = [], fs = []) => { R[id] = { st, msg, ev }; fs.forEach((f) => f.issues.add(id)); };
+  /* Gắn một vấn đề vào đúng trường: vấn đề cụ thể + cách sửa cụ thể */
+  const flag = (f, id, st, msg, fix) => {
+    const h = f && (f.head || f); if (!h || !h.probs) return;
+    h.issues.add(id);
+    const old = h.probs.find((x) => x.id === id);
+    if (old) { if (AZ_ST[st].o < AZ_ST[old.st].o) old.st = st; if (msg && !old.msg.includes(msg)) old.msg += ' ' + msg; return; }
+    h.probs.push({ id, st, msg, fix });
+  };
   const names = (fs, extra) => fs.map((f) => azName(f) + (extra ? extra(f) : ''));
   const of = (...kinds) => fields.filter((f) => kinds.includes(f.kind));
   const bodyText = azClean((doc.body || doc.documentElement).textContent);
@@ -274,6 +396,8 @@ function azAnalyzePage(html, opt = {}) {
     if (both) ev.push('Hỏi cả Tuổi và Ngày sinh — tuổi suy ra được từ ngày sinh');
     if (N > 15) ev.push(`${N} trường trên một trang`);
     put('F2', 'warn', 'Có trường có thể không cần ở bước đăng ký.', ev, [...sens, ...of('age')]);
+    sens.forEach((f) => flag(f, 'F2', 'warn', `Hỏi ${f.kind === 'cccd' ? 'số giấy tờ tùy thân' : 'thông tin nhạy cảm'} ngay lúc đăng ký.`, 'Bỏ nếu chưa thật cần. Nếu chỉ cần khi trao giải hoặc xác minh, dời tới lúc đó. Nếu giữ, nói rõ lý do trong dòng gợi ý.'));
+    if (both) of('age').forEach((f) => flag(f, 'F2', 'warn', 'Hỏi Tuổi trong khi form đã có Ngày sinh.', 'Bỏ ô Tuổi; hệ thống tự tính tuổi từ ngày sinh.'));
   } else put('F2', 'manual', `Có ${N} trường. Rà từng trường bằng công cụ "Có nên hỏi trường này?".`);
 
   const stepper = /buoc\s*\d+\s*(\/|tren|of|trong)\s*\d+|step\s*\d+\s*(of|\/)\s*\d+/.test(T) || doc.querySelector('[aria-current=step], [role=progressbar], progress, [class*=stepper], [class*=steps], [class*=step-indicator], [class*=wizard]');
@@ -301,7 +425,10 @@ function azAnalyzePage(html, opt = {}) {
         if (!short && !dob) pairs.push([textLike[i], textLike[j]]);
       }
     }
-    if (pairs.length) put('F5', 'fail', `${pairs.length} cặp trường nằm cạnh nhau trên màn hình máy tính (1280px).`, pairs.slice(0, 6).map(([a, b]) => `${azName(a)} | ${azName(b)}`), pairs.flat());
+    if (pairs.length) {
+      put('F5', 'fail', `${pairs.length} cặp trường nằm cạnh nhau trên màn hình máy tính (1280px).`, pairs.slice(0, 6).map(([a, b]) => `${azName(a)} | ${azName(b)}`), pairs.flat());
+      pairs.forEach(([a, b]) => { const fx = 'Xếp mỗi trường một hàng, nhãn trên ô. Chỉ đặt cạnh nhau các ô ngắn cùng một thông tin (Ngày/Tháng/Năm).'; flag(a, 'F5', 'fail', `Nằm cùng hàng với "${azName(b)}" trên máy tính.`, fx); flag(b, 'F5', 'fail', `Nằm cùng hàng với "${azName(a)}" trên máy tính.`, fx); });
+    }
     else put('F5', 'pass', 'Các trường xếp thành một cột trên máy tính.');
   } else {
     const twoCol = doc.querySelector('[class*="col-md-6"], [class*="col-sm-6"], [class*="col-lg-6"], [class*="grid-cols-2"], [class*="w-1/2"], [class*="half"], .row .col-6');
@@ -317,7 +444,10 @@ function azAnalyzePage(html, opt = {}) {
 
   const pw = of('password', 'confirmPassword');
   if (pw.length && N <= 3 && /dang nhap|login|sign in/.test(T)) put('F7', 'warn', 'Trang có vẻ yêu cầu đăng nhập trước khi đăng ký.');
-  else if (pw.length) put('F7', 'warn', 'Form bắt tạo mật khẩu. Cân nhắc cho đăng ký không cần tài khoản, gửi liên kết quản lý hồ sơ qua email.', names(pw), pw);
+  else if (pw.length) {
+    put('F7', 'warn', 'Form bắt tạo mật khẩu. Cân nhắc cho đăng ký không cần tài khoản, gửi liên kết quản lý hồ sơ qua email.', names(pw), pw);
+    of('password').forEach((f) => flag(f, 'F7', 'warn', 'Bắt tạo mật khẩu ngay khi đăng ký.', 'Cho gửi hồ sơ không cần tài khoản: gửi liên kết quản lý hồ sơ qua email, hoặc mời tạo mật khẩu sau khi gửi xong.'));
+  }
   else put('F7', 'pass', 'Không bắt tạo tài khoản ngay trong form.');
 
   /* ===== L · Nhãn ===== */
@@ -325,15 +455,20 @@ function azAnalyzePage(html, opt = {}) {
   const cbNoLabel = fields.filter((f) => f.type === 'checkbox' && ['aria', 'title', 'none', 'placeholder'].includes(f.labelSrc));
   const missing = [...noLabel, ...cbNoLabel];
   if (!N) put('L1', 'na', 'Không tìm thấy trường nhập liệu.');
-  else if (missing.length) put('L1', 'fail', `${missing.length}/${N} trường không có nhãn hiển thị.`, names(missing, (f) => ` (${f.labelSrc === 'placeholder' ? 'chỉ có placeholder' : f.labelSrc === 'aria' ? 'chỉ có aria-label, không nhìn thấy' : 'không có nhãn'})`), missing);
+  else if (missing.length) {
+    put('L1', 'fail', `${missing.length}/${N} trường không có nhãn hiển thị.`, names(missing, (f) => ` (${f.labelSrc === 'placeholder' ? 'chỉ có placeholder' : f.labelSrc === 'aria' ? 'chỉ có aria-label, không nhìn thấy' : 'không có nhãn'})`), missing);
+    missing.forEach((f) => flag(f, 'L1', 'fail', f.labelSrc === 'placeholder' ? `Chỉ có chữ mờ trong ô ("${azCut(f.ph, 40)}"), biến mất khi bắt đầu gõ.` : f.labelSrc === 'aria' ? 'Chỉ có aria-label: người dùng không nhìn thấy nhãn.' : 'Không có nhãn: người dùng phải đoán ô này hỏi gì.', `Thêm nhãn hiển thị phía trên ô: [[<label for="${azIdOf(f)}">${azCut(azLabText(f), 30)}</label>]].`));
+  }
   else {
     let left = [];
     if (metrics) left = fields.filter((f) => f.d && f.m && f.m.lab && f.m.lab.x + f.m.lab.w <= f.m.r.x + 2 && Math.abs((f.m.lab.y + f.m.lab.h / 2) - (f.m.r.y + f.m.r.h / 2)) < f.m.r.h && !['radio', 'checkbox'].includes(f.type));
-    if (left.length > N / 3) put('L1', 'warn', `Mọi trường có nhãn, nhưng ${left.length} nhãn nằm bên trái ô trên điện thoại — dễ bị cắt chữ.`, names(left), left);
+    if (left.length > N / 3) { put('L1', 'warn', `Mọi trường có nhãn, nhưng ${left.length} nhãn nằm bên trái ô trên điện thoại — dễ bị cắt chữ.`, names(left), left); left.forEach((f) => flag(f, 'L1', 'warn', 'Nhãn nằm bên trái ô trên điện thoại, dễ bị cắt chữ.', 'Đặt nhãn phía trên ô, căn trái.')); }
     else put('L1', 'pass', `Cả ${N} trường đều có nhãn hiển thị.`);
   }
   const phOnly = fields.filter((f) => f.ph && f.labelSrc === 'placeholder');
   const phLong = fields.filter((f) => f.ph && f.labelSrc !== 'placeholder' && f.ph.length > 45);
+  phOnly.forEach((f) => flag(f, 'L2', 'fail', `Dùng chữ mờ "${azCut(f.ph, 40)}" thay cho nhãn.`, 'Chuyển nội dung đó thành nhãn phía trên ô. Nếu là ví dụ định dạng, đưa xuống dòng gợi ý dưới nhãn.'));
+  phLong.forEach((f) => flag(f, 'L2', 'warn', `Hướng dẫn dài nằm trong ô ("${azCut(f.ph, 50)}") sẽ biến mất khi gõ.`, 'Đưa hướng dẫn ra dòng gợi ý dưới nhãn, luôn hiển thị.'));
   if (phOnly.length) put('L2', 'fail', `${phOnly.length} trường dùng placeholder thay nhãn.`, names(phOnly, (f) => ` — "${azCut(f.ph, 40)}"`), phOnly);
   else if (phLong.length) put('L2', 'warn', 'Có hướng dẫn dài nằm trong placeholder (biến mất khi gõ).', names(phLong, (f) => ` — "${azCut(f.ph, 50)}"`), phLong);
   else put('L2', N ? 'pass' : 'na', N ? 'Không dùng placeholder thay nhãn.' : '');
@@ -344,6 +479,7 @@ function azAnalyzePage(html, opt = {}) {
   if (!N) put('L3', 'na', '');
   else if (reqF.length) {
     const unmarked = reqF.filter((f) => !star(f));
+    unmarked.forEach((f) => flag(f, 'L3', 'fail', 'Bắt buộc nhưng nhãn không có dấu * hay chữ "bắt buộc".', 'Thêm dấu * sau nhãn và câu "Các trường có dấu * là bắt buộc" ở đầu form; hoặc ghi "(không bắt buộc)" cạnh các trường tùy chọn.'));
     if (unmarked.length) put('L3', 'fail', `${unmarked.length}/${reqF.length} trường bắt buộc không có dấu * hay chữ "bắt buộc".`, names(unmarked), unmarked);
     else if (!starNote) put('L3', 'warn', 'Trường bắt buộc có dấu *, nhưng không thấy câu chú thích "Các trường có dấu * là bắt buộc".');
     else put('L3', 'pass', `${reqF.length} trường bắt buộc đều được đánh dấu, có chú thích.`);
@@ -353,23 +489,34 @@ function azAnalyzePage(html, opt = {}) {
   const fmtF = fields.filter((f) => ['phone', 'cccd', 'otp', 'file', 'url', 'password'].includes(f.kind) || (f.kind === 'dob' && f.type !== 'date') || (f.kind === 'longtext'));
   const noHint = fmtF.filter((f) => !f.hint && !/ví dụ|vd|\d{3,}/i.test(f.label));
   if (!fmtF.length) put('L4', 'na', 'Không có trường cần gợi ý định dạng.');
-  else if (noHint.length) put('L4', 'warn', `${noHint.length}/${fmtF.length} trường cần định dạng chưa có gợi ý hiển thị sẵn.`, names(noHint), noHint);
+  else if (noHint.length) {
+    put('L4', 'warn', `${noHint.length}/${fmtF.length} trường cần định dạng chưa có gợi ý hiển thị sẵn.`, names(noHint), noHint);
+    noHint.forEach((f) => flag(f, 'L4', 'warn', 'Chưa có gợi ý định dạng hiển thị sẵn: người dùng dễ nhập sai rồi mới biết.', `Thêm dòng gợi ý dưới nhãn: "${AZ_HINT[f.kind] || (f.kind === 'file' ? (azIsImg(f) ? 'JPG hoặc PNG, tối đa 5 MB' : 'PDF, tối đa 20 MB') : 'Ví dụ: …')}", gắn vào ô bằng [[aria-describedby]].`));
+  }
   else put('L4', 'pass', 'Các trường cần định dạng đều có gợi ý.');
 
   const abbr = fields.filter((f) => /(^|[\s(])(SĐT|SDT|ĐT|CMND|HKTT|MST|ĐVCQ|NS|DOB)([\s):]|$)/.test(f.label) && f.label.length < 30);
   const longLb = fields.filter((f) => f.label.length > 70);
+  const AZ_ABBR = { 'SĐT': 'Số điện thoại', SDT: 'Số điện thoại', 'ĐT': 'Số điện thoại', CMND: 'Số căn cước', HKTT: 'Địa chỉ thường trú', MST: 'Mã số thuế', NS: 'Ngày sinh', DOB: 'Ngày sinh', 'ĐVCQ': 'Đơn vị, cơ quan' };
+  abbr.forEach((f) => { const a = (f.label.match(/(SĐT|SDT|ĐT|CMND|HKTT|MST|ĐVCQ|NS|DOB)/) || [])[1]; flag(f, 'L5', 'warn', `Nhãn viết tắt "${azCut(f.label, 30)}".`, `Viết đầy đủ: "${azLabText(f).replace(a, AZ_ABBR[a] || a)}".`); });
+  longLb.forEach((f) => flag(f, 'L5', 'warn', `Nhãn dài ${f.label.length} ký tự.`, 'Rút nhãn còn vài chữ; đưa phần giải thích xuống dòng gợi ý.'));
   if (abbr.length || longLb.length) put('L5', 'warn', 'Có nhãn viết tắt hoặc quá dài.', [...names(abbr, () => ' — viết tắt'), ...names(longLb, () => ' — quá dài')], [...abbr, ...longLb]);
   else put('L5', N ? 'pass' : 'na', N ? 'Nhãn ngắn, không viết tắt.' : '');
 
   const sensNoWhy = fields.filter((f) => ['cccd', 'sensitive'].includes(f.kind) && !/de |dung de|nham|xac minh|vi sao|ly do/.test(fold(f.hint)));
   if (!of('cccd', 'sensitive').length) put('L6', 'na', 'Không hỏi thông tin nhạy cảm.');
-  else if (sensNoWhy.length) put('L6', 'warn', 'Hỏi thông tin nhạy cảm mà không giải thích lý do.', names(sensNoWhy), sensNoWhy);
+  else if (sensNoWhy.length) {
+    put('L6', 'warn', 'Hỏi thông tin nhạy cảm mà không giải thích lý do.', names(sensNoWhy), sensNoWhy);
+    sensNoWhy.forEach((f) => flag(f, 'L6', 'warn', 'Hỏi thông tin nhạy cảm mà không nói để làm gì.', 'Thêm gợi ý nêu lý do, ví dụ "Dùng để xác minh danh tính khi nhận giải".'));
+  }
   else put('L6', 'pass', 'Thông tin nhạy cảm có giải thích lý do.');
 
   const caps = (s) => { const L = s.replace(/[^\p{L}]/gu, ''); return L.length >= 4 && L === L.toLocaleUpperCase('vi') && L !== L.toLocaleLowerCase('vi'); };
   const titleCase = (s) => { const w = s.split(/\s+/).filter((x) => /^\p{L}/u.test(x)); return w.length >= 3 && w.every((x) => x[0] === x[0].toLocaleUpperCase('vi')) && !caps(s); };
   const capItems = [...fields.map((f) => f.label), ...buttons.map(btnText), ...Array.from(doc.querySelectorAll('h1,h2,h3,legend')).map((h) => azClean(h.textContent))].filter(Boolean);
   const capsL = [...new Set(capItems.filter(caps))], titleL = [...new Set(capItems.filter(titleCase))];
+  fields.filter((f) => f.label && caps(f.label)).forEach((f) => flag(f, 'L7', 'fail', `Nhãn viết IN HOA: "${azCut(f.label, 40)}".`, `Viết hoa kiểu câu: "${azCut(azSentence(azLabText(f)), 40)}".`));
+  if (info.vi && !capsL.length) fields.filter((f) => f.label && titleCase(f.label)).forEach((f) => flag(f, 'L7', 'warn', `Nhãn viết hoa mỗi từ: "${azCut(f.label, 40)}".`, `Viết hoa kiểu câu: "${azCut(azSentence(azLabText(f)), 40)}".`));
   if (capsL.length) put('L7', 'fail', 'Có tiêu đề, nhãn hoặc nút viết IN HOA.', capsL.slice(0, 8).map((s) => `"${azCut(s, 40)}"`));
   else if (titleL.length && !info.vi) put('L7', 'manual', 'Trang không viết bằng tiếng Việt: không chấm quy tắc viết hoa kiểu câu.');
   else if (titleL.length) put('L7', 'warn', 'Có chữ viết hoa mỗi từ (Title Case) — tiếng Việt nên viết hoa kiểu câu.', titleL.slice(0, 8).map((s) => `"${azCut(s, 40)}"`));
@@ -381,6 +528,13 @@ function azAnalyzePage(html, opt = {}) {
   of('phone').forEach((f) => { if (f.type !== 'tel' && f.tag === 'input') kb.push([f, `dùng type="${f.type}", nên là type="tel"`]); });
   of('cccd', 'otp').forEach((f) => { if (f.type === 'number') kb.push([f, 'type="number" làm mất số 0 ở đầu']); else if (f.tag === 'input' && f.im !== 'numeric' && f.type !== 'tel') kb.push([f, 'thiếu inputmode="numeric"']); });
   const kbF = of('email', 'phone', 'cccd', 'otp');
+  kb.forEach(([f, m]) => {
+    const st = /type=/.test(m) ? 'fail' : 'warn';
+    if (f.kind === 'email') flag(f, 'I1', st, `Ô dùng [[type="${f.type}"]]: điện thoại mở bàn phím chữ, không có phím @ sẵn.`, 'Đổi thành [[type="email"]].');
+    else if (f.kind === 'phone') flag(f, 'I1', st, f.type === 'number' ? 'Ô dùng [[type="number"]]: bàn phím không có dấu +, có thể mất số 0 đầu, cuộn chuột làm đổi số.' : `Ô dùng [[type="${f.type}"]]: điện thoại mở bàn phím chữ.`, 'Đổi thành [[type="tel"]] (bàn phím số có dấu +).');
+    else if (f.type === 'number') flag(f, 'I1', st, 'Ô dùng [[type="number"]]: mất số 0 ở đầu (001…), cuộn chuột làm đổi số.', 'Dùng [[type="text" inputmode="numeric"]].');
+    else flag(f, 'I1', st, 'Chưa có [[inputmode="numeric"]]: điện thoại mở bàn phím chữ.', 'Thêm [[inputmode="numeric"]].');
+  });
   if (!kbF.length) put('I1', 'na', 'Không có trường email, điện thoại, mã số.');
   else if (kb.length) put('I1', kb.some(([, m]) => /type=/.test(m)) ? 'fail' : 'warn', `${kb.length} trường mở sai bàn phím trên điện thoại.`, kb.map(([f, m]) => `${azName(f)}: ${m}`), kb.map(([f]) => f));
   else put('I1', 'pass', 'Các trường email, điện thoại, mã số mở đúng bàn phím.');
@@ -397,15 +551,20 @@ function azAnalyzePage(html, opt = {}) {
   });
   const acF = fields.filter((f) => AC[f.kind]);
   if (!acF.length) put('I2', 'na', 'Không có trường thông tin cá nhân.');
-  else if (acBad.length) put('I2', 'fail', `${acBad.length}/${acF.length} trường thông tin cá nhân chưa hỗ trợ tự động điền.`, acBad.map(([f, m]) => `${azName(f)}: ${m}`), acBad.map(([f]) => f));
+  else if (acBad.length) {
+    put('I2', 'fail', `${acBad.length}/${acF.length} trường thông tin cá nhân chưa hỗ trợ tự động điền.`, acBad.map(([f, m]) => `${azName(f)}: ${m}`), acBad.map(([f]) => f));
+    acBad.forEach(([f, m]) => flag(f, 'I2', 'fail', `Trình duyệt không tự điền được ô này: ${m}.`, /form autocomplete/.test(m) ? `Bỏ [[autocomplete="off"]] trên thẻ form, thêm [[autocomplete="${AC[f.kind][0]}"]] cho ô.` : `Đặt [[autocomplete="${AC[f.kind][0]}"]].`));
+  }
   else put('I2', 'pass', `${acF.length} trường thông tin cá nhân có autocomplete đúng chuẩn.`);
 
   const strictPat = fields.filter((f) => ['phone', 'cccd', 'otp'].includes(f.kind) && f.pattern && !/\\s|\s|\+|\[[^\]]*[ .\-]/.test(f.pattern));
+  strictPat.forEach((f) => flag(f, 'I3', 'fail', `[[pattern="${azCut(f.pattern, 30)}"]] từ chối số có dấu cách, dấu chấm, +84.`, 'Bỏ pattern. Hệ thống tự chuẩn hóa (bỏ khoảng trắng, dấu chấm; đổi +84 thành 0) rồi mới kiểm tra.'));
   if (strictPat.length) put('I3', 'fail', 'Mẫu kiểm tra (pattern) không chấp nhận dấu cách, dấu chấm, +84.', names(strictPat, (f) => ` — pattern="${azCut(f.pattern, 30)}"`), strictPat);
   else if (of('phone', 'cccd').length) put('I3', 'manual', 'Không thấy ràng buộc định dạng cứng trong HTML. Thử nhập "+84 912.345.678" để xác nhận hệ thống tự chuẩn hóa.');
   else put('I3', 'na', 'Không có trường cần chuẩn hóa định dạng.');
 
   const mlBad = fields.filter((f) => ['phone', 'cccd', 'otp'].includes(f.kind) && f.maxlength && !(f.kind === 'otp' && f.maxlength === 1));
+  mlBad.forEach((f) => flag(f, 'I4', 'fail', `[[maxlength="${f.maxlength}"]] cắt cụt khi dán "${f.kind === 'phone' ? '0912 345 678' : '001 203 004 567'}" (có dấu cách).`, 'Bỏ maxlength; kiểm tra độ dài sau khi chuẩn hóa và báo lỗi cụ thể (ví dụ "cần 10 chữ số, bạn đã nhập 9").'));
   if (mlBad.length) put('I4', 'fail', 'maxlength cắt cụt chuỗi khi dán có dấu cách (ví dụ "0912 345 678").', names(mlBad, (f) => ` (maxlength=${f.maxlength})`), mlBad);
   else if (of('phone', 'cccd', 'otp').length) put('I4', 'manual', 'Thử dán "0912 345 678" và sửa giữa chuỗi để kiểm tra mặt nạ nhập.');
   else put('I4', 'na', '');
@@ -414,14 +573,15 @@ function azAnalyzePage(html, opt = {}) {
   if (metrics && dobParts.length) {
     const wide = dobParts.filter((f) => f.d && f.d.r.w > 200);
     put('I5', wide.length ? 'warn' : 'pass', wide.length ? 'Ô ngày/tháng/năm quá rộng so với dữ liệu.' : 'Ô ngày/tháng/năm có độ rộng phù hợp.', names(wide, (f) => ` (${f.d.r.w}px)`), wide);
+    wide.forEach((f) => flag(f, 'I5', 'warn', `Ô rộng ${f.d.r.w}px cho vài chữ số.`, 'Đặt độ rộng theo dữ liệu: ô ngày/tháng khoảng 3 ký tự, ô năm khoảng 5 ký tự.'));
   } else put('I5', 'manual', 'Kiểm tra độ rộng ô tương ứng độ dài dữ liệu (năm, CCCD, họ tên).');
 
   const fn = of('firstname'), ln = of('lastname'), nm = of('name');
   const nameBad = [];
-  if (fn.length && ln.length) nameBad.push('Tách "Họ" và "Tên" thành hai ô');
+  if (fn.length && ln.length) { nameBad.push('Tách "Họ" và "Tên" thành hai ô'); [...fn, ...ln].forEach((f) => flag(f, 'I6', 'fail', 'Tách Họ và Tên thành hai ô: người dùng phải nghĩ nên điền phần nào, tên đệm vào đâu.', 'Gộp thành một ô "Họ và tên" với [[autocomplete="name"]].')); }
   [...nm, ...fn, ...ln].forEach((f) => {
-    if (f.maxlength && f.maxlength < 50) nameBad.push(`${azName(f)}: maxlength=${f.maxlength} quá ngắn cho tên Việt`);
-    if (f.pattern && /a-z/i.test(f.pattern) && !/\\p\{L\}|À|à|\\u00/.test(f.pattern)) nameBad.push(`${azName(f)}: pattern="${azCut(f.pattern, 24)}" từ chối chữ có dấu`);
+    if (f.maxlength && f.maxlength < 50) { nameBad.push(`${azName(f)}: maxlength=${f.maxlength} quá ngắn cho tên Việt`); flag(f, 'I6', 'fail', `[[maxlength="${f.maxlength}"]]: tên dài như "Tôn Nữ Hoàng Bảo Ngọc Phương Thảo" bị cắt.`, 'Bỏ maxlength hoặc để từ 100 ký tự.'); }
+    if (f.pattern && /a-z/i.test(f.pattern) && !/\\p\{L\}|À|à|\\u00/.test(f.pattern)) { nameBad.push(`${azName(f)}: pattern="${azCut(f.pattern, 24)}" từ chối chữ có dấu`); flag(f, 'I6', 'fail', `[[pattern="${azCut(f.pattern, 24)}"]] từ chối chữ có dấu.`, 'Bỏ pattern; chấp nhận chữ có dấu, dấu nháy, dấu gạch nối.'); }
   });
   if (!nm.length && !fn.length && !ln.length) put('I6', 'na', 'Không có trường họ tên.');
   else if (nameBad.length) put('I6', 'fail', 'Trường họ tên chưa phù hợp tên tiếng Việt.', nameBad, [...nm, ...fn, ...ln]);
@@ -429,13 +589,15 @@ function azAnalyzePage(html, opt = {}) {
 
   const dobF = of('dob'), dobSel = dobParts.filter((f) => f.tag === 'select');
   if (!dobF.length && !dobParts.length) put('I7', 'na', 'Không hỏi ngày sinh.');
-  else if (dobF.some((f) => f.type === 'date')) put('I7', 'warn', 'Ngày sinh dùng lịch chọn ngày (type="date"): phải lùi nhiều năm, khó nhập trên điện thoại.', names(dobF.filter((f) => f.type === 'date')), dobF);
-  else if (dobSel.some((f) => (f.opts || []).length > 40) || dobF.some((f) => f.tag === 'select')) put('I7', 'warn', 'Năm sinh chọn từ danh sách dài.', names(dobSel), dobSel);
+  else if (dobF.some((f) => f.type === 'date')) { put('I7', 'warn', 'Ngày sinh dùng lịch chọn ngày (type="date"): phải lùi nhiều năm, khó nhập trên điện thoại.', names(dobF.filter((f) => f.type === 'date')), dobF); dobF.filter((f) => f.type === 'date').forEach((f) => flag(f, 'I7', 'warn', 'Dùng lịch chọn ngày: phải lùi hàng chục năm, khó nhập trên điện thoại.', 'Dùng ba ô Ngày / Tháng / Năm nhập bằng bàn phím số ([[inputmode="numeric"]]).')); }
+  else if (dobSel.some((f) => (f.opts || []).length > 40) || dobF.some((f) => f.tag === 'select')) { put('I7', 'warn', 'Năm sinh chọn từ danh sách dài.', names(dobSel), dobSel); [...dobSel.filter((f) => (f.opts || []).length > 40), ...dobF.filter((f) => f.tag === 'select')].forEach((f) => flag(f, 'I7', 'warn', `Chọn từ danh sách ${(f.opts || []).length} mục.`, 'Dùng ba ô Ngày / Tháng / Năm nhập bằng bàn phím số.')); }
   else if (dobParts.length >= 3) put('I7', 'pass', 'Ngày sinh nhập bằng ba ô Ngày/Tháng/Năm.');
   else put('I7', 'pass', 'Ngày sinh nhập bằng bàn phím.');
 
   const tas = of('longtext');
   const counterText = /con\s*\d+\s*(tu|ky tu)|\d+\s*\/\s*\d+\s*(tu|ky tu)?|toi da\s*\d+\s*(tu|ky tu)/;
+  tas.filter((f) => f.maxlength).forEach((f) => flag(f, 'I8', 'fail', `[[maxlength="${f.maxlength}"]] cắt cụt đoạn văn dán vào mà không báo.`, 'Bỏ maxlength; hiển thị bộ đếm "Còn x từ" và báo lỗi khi vượt.'));
+  tas.filter((f) => !f.maxlength && !counterText.test(fold(f.hint + ' ' + f.label))).forEach((f) => flag(f, 'I8', 'warn', 'Chưa nêu giới hạn độ dài, chưa có bộ đếm.', 'Ghi giới hạn trong gợi ý ("Tối đa 300 từ") và thêm bộ đếm cập nhật khi gõ.'));
   if (!tas.length) put('I8', 'na', 'Không có ô văn bản dài.');
   else if (tas.some((f) => f.maxlength)) put('I8', 'fail', 'maxlength cắt cụt đoạn văn dán vào mà không báo.', names(tas.filter((f) => f.maxlength), (f) => ` (maxlength=${f.maxlength})`), tas.filter((f) => f.maxlength));
   else if (tas.every((f) => counterText.test(fold(f.hint + ' ' + f.label)))) put('I8', 'pass', 'Ô văn bản dài có giới hạn rõ, không cắt cụt.');
@@ -443,6 +605,8 @@ function azAnalyzePage(html, opt = {}) {
 
   const paste = fields.filter((f) => f.onpaste);
   const confE = of('confirmEmail');
+  paste.forEach((f) => flag(f, 'I9', 'fail', 'Chặn dán ([[onpaste]]): người dùng phải gõ lại từng ký tự.', 'Bỏ chặn dán.'));
+  confE.forEach((f) => flag(f, 'I9', 'fail', 'Bắt nhập lại email.', 'Bỏ ô này. Hiển thị lại email ở trang xem lại và gợi ý sửa tên miền gõ nhầm (gmial.com → gmail.com).'));
   if (paste.length || confE.length) put('I9', 'fail', 'Chặn dán hoặc bắt nhập lại thông tin.', [...names(paste, () => ' — chặn dán (onpaste)'), ...names(confE, () => ' — ô nhập lại email')], [...paste, ...confE]);
   else put('I9', N ? 'pass' : 'na', N ? 'Không chặn dán, không bắt nhập lại email.' : '');
 
@@ -454,17 +618,23 @@ function azAnalyzePage(html, opt = {}) {
     const toggle = p1.some((f) => { const box = f.el.parentElement && f.el.parentElement.parentElement; return box && Array.from(box.querySelectorAll('button,[role=button],span,i')).some((b) => /hien|an mat khau|show|hide|xem|eye|toggle/.test(fold(b.textContent + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('class') || '')))); });
     if (!toggle) ev.push('Không thấy nút Hiện/Ẩn mật khẩu');
     put('I10', ev.length ? (ev.length > 1 || of('confirmPassword').length ? 'fail' : 'warn') : 'pass', ev.length ? 'Ô mật khẩu chưa tối ưu.' : 'Ô mật khẩu có nút hiện/ẩn, hỗ trợ trình quản lý mật khẩu.', ev, pw);
+    if (ev.length) p1.forEach((f) => flag(f, 'I10', R.I10.st, ev.filter((e) => !/Nhập lại/.test(e)).map((e) => e.replace(`${azName(f)}: `, '')).join('; ') || 'Có ô nhập lại mật khẩu.', 'Một ô mật khẩu, có nút Hiện/Ẩn, [[autocomplete="new-password"]], cho dán.'));
+    of('confirmPassword').forEach((f) => flag(f, 'I10', 'fail', 'Bắt nhập lại mật khẩu.', 'Bỏ ô này; nút Hiện/Ẩn giúp người dùng tự kiểm tra.'));
   }
 
   /* ===== C · Lựa chọn ===== */
   const sels = fields.filter((f) => f.tag === 'select');
   const smallSel = sels.filter((f) => f.opts && f.opts.length >= 1 && f.opts.length <= 5 && !['dobPart', 'province', 'ward', 'district'].includes(f.kind));
   if (!sels.length) put('C1', of('choice').length ? 'pass' : 'na', of('choice').length ? 'Lựa chọn ít dùng radio.' : 'Không có câu hỏi lựa chọn.');
-  else if (smallSel.length) put('C1', 'fail', 'Câu hỏi có ít lựa chọn bị giấu trong dropdown.', names(smallSel, (f) => ` (${f.opts.length} lựa chọn: ${azCut(f.opts.join(', '), 40)})`), smallSel);
+  else if (smallSel.length) {
+    put('C1', 'fail', 'Câu hỏi có ít lựa chọn bị giấu trong dropdown.', names(smallSel, (f) => ` (${f.opts.length} lựa chọn: ${azCut(f.opts.join(', '), 40)})`), smallSel);
+    smallSel.forEach((f) => flag(f, 'C1', 'fail', `Chỉ ${f.opts.length} lựa chọn (${azCut(f.opts.join(', '), 40)}) nhưng phải mở danh sách mới thấy.`, 'Dùng nhóm nút chọn (radio) hiển thị sẵn mọi lựa chọn, bọc trong [[fieldset]] + [[legend]].'));
+  }
   else put('C1', 'pass', 'Không có dropdown ít lựa chọn.');
 
   const longSel = sels.filter((f) => f.opts && f.opts.length > 15);
   const combos = fields.filter((f) => f.type === 'combobox' || f.role === 'combobox' || f.el.getAttribute('list'));
+  longSel.forEach((f) => flag(f, 'C2', 'warn', `Danh sách ${f.opts.length} mục, không gõ để tìm được.`, 'Dùng ô tìm kiếm gợi ý (combobox), tìm được khi gõ không dấu hoặc viết tắt.'));
   if (longSel.length) put('C2', 'warn', 'Danh sách dài không gõ để tìm được (trừ khi giao diện tùy biến có ô tìm).', names(longSel, (f) => ` (${f.opts.length} mục)`), longSel);
   else if (combos.length) put('C2', 'pass', 'Danh sách dài dùng ô tìm kiếm gợi ý.');
   else put('C2', 'na', 'Không có danh sách dài.');
@@ -480,6 +650,8 @@ function azAnalyzePage(html, opt = {}) {
       if (old.length) ev.push(`Danh mục tỉnh còn tên cũ: ${old.slice(0, 6).join(', ')}${old.length > 6 ? '…' : ''}`);
       if (f.opts.length >= 60) ev.push(`Danh mục có ${f.opts.length} tỉnh (cũ là 63, mới là 34)`);
     });
+    of('district').forEach((f) => flag(f, 'C3', 'fail', 'Còn cấp Quận/Huyện — từ 01/07/2025 không còn cấp huyện.', 'Bỏ ô này. Địa chỉ gồm Tỉnh/Thành phố (34) → Phường/Xã/Đặc khu.'));
+    of('province').forEach((f) => { if (!f.opts) return; const old = OLD_PROVINCES.filter((p) => f.opts.some((o) => fold(o).includes(fold(p)))); if (old.length || f.opts.length >= 60) flag(f, 'C3', 'fail', old.length ? `Danh mục còn tên tỉnh cũ: ${old.slice(0, 4).join(', ')}${old.length > 4 ? '…' : ''}.` : `Danh mục có ${f.opts.length} tỉnh (danh mục mới là 34).`, 'Cập nhật danh mục 34 tỉnh/thành; cho tìm bằng tên cũ để dẫn tới tỉnh mới (gõ "Bình Dương" → TP. Hồ Chí Minh).'); });
     if (ev.length) put('C3', 'fail', 'Địa chỉ chưa theo đơn vị hành chính mới.', ev, [...of('district'), ...of('province')]);
     else if (of('province').some((f) => f.opts)) put('C3', 'pass', 'Danh mục tỉnh/thành và cấu trúc địa chỉ đã cập nhật.');
     else put('C3', 'manual', 'Không đọc được danh mục tỉnh (có thể tải bằng JavaScript). Kiểm tra danh mục 34 tỉnh và không còn Quận/Huyện.');
@@ -487,9 +659,12 @@ function azAnalyzePage(html, opt = {}) {
 
   const sw = fields.filter((f) => f.type === 'switch');
   put('C4', sw.length ? 'warn' : 'pass', sw.length ? 'Có công tắc (toggle) trong form có nút gửi.' : 'Không dùng công tắc trong form.', names(sw), sw);
+  sw.forEach((f) => flag(f, 'C4', 'warn', 'Dùng công tắc (toggle) trong form có nút gửi: không rõ bật là đã lưu hay chưa.', 'Dùng ô đánh dấu (checkbox).'));
 
   const pre = fields.filter((f) => (f.type === 'checkbox' && f.checked && ['consent', 'marketing'].includes(f.kind)) || (f.type === 'radio' && f.group && f.group.some((g) => g.checked) && f.kind === 'gender'));
   const preOther = fields.filter((f) => f.type === 'radio' && f.group && f.group.some((g) => g.checked) && f.kind !== 'gender');
+  pre.forEach((f) => flag(f, 'C5', 'fail', 'Được chọn sẵn: người dùng có thể đồng ý hoặc trả lời mà không biết.', 'Bỏ chọn sẵn để người dùng tự chọn.'));
+  preOther.forEach((f) => flag(f, 'C5', 'warn', 'Có lựa chọn được chọn sẵn.', 'Chỉ chọn sẵn khi đó là lựa chọn an toàn, đúng với đa số người dùng.'));
   if (pre.length) put('C5', 'fail', 'Câu trả lời cá nhân hoặc ô đồng ý được chọn sẵn.', names(pre), pre);
   else if (preOther.length) put('C5', 'warn', 'Có lựa chọn được chọn sẵn — kiểm tra mặc định có an toàn, đúng với đa số.', names(preOther), preOther);
   else put('C5', N ? 'pass' : 'na', 'Không có lựa chọn cá nhân nào được chọn sẵn.');
@@ -498,7 +673,10 @@ function azAnalyzePage(html, opt = {}) {
   const rcNoLab = [];
   rc.forEach((f) => (f.group || [f]).forEach((g) => { if (!['label', 'wrap'].includes(g.labelSrc)) rcNoLab.push(g); }));
   if (!rc.length) put('C6', 'na', 'Không có radio/checkbox.');
-  else if (rcNoLab.length) put('C6', 'fail', 'Radio/checkbox không có nhãn bấm được (phải bấm trúng ô tròn/vuông nhỏ).', [...new Set(rcNoLab.map((g) => azCut(g.optLabel || g.label || g.name, 40)))].slice(0, 8), rcNoLab);
+  else if (rcNoLab.length) {
+    put('C6', 'fail', 'Radio/checkbox không có nhãn bấm được (phải bấm trúng ô tròn/vuông nhỏ).', [...new Set(rcNoLab.map((g) => azCut(g.optLabel || g.label || g.name, 40)))].slice(0, 8), rcNoLab);
+    rcNoLab.forEach((g) => flag(g, 'C6', 'fail', 'Phải bấm trúng ô tròn/vuông nhỏ; bấm vào chữ không chọn được.', 'Bọc ô trong [[<label>]] hoặc gắn [[<label for>]] để bấm vào chữ cũng chọn được.'));
+  }
   else put('C6', 'pass', 'Mọi radio/checkbox có nhãn bấm được.');
 
   /* ===== V · Kiểm tra & lỗi (cần thử tay, trừ V6, V9) ===== */
@@ -508,6 +686,55 @@ function azAnalyzePage(html, opt = {}) {
   else put('V6', primary.length ? 'pass' : 'na', primary.length ? 'Nút gửi không bị khóa sẵn.' : 'Không tìm thấy nút gửi.');
   const descN = fields.filter((f) => f.el.getAttribute('aria-describedby')).length;
   put('V9', N ? 'manual' : 'na', N ? `${descN}/${N} trường có aria-describedby. Gây một lỗi rồi nghe bằng trình đọc màn hình để kiểm tra.` : '');
+
+  /* Kết quả lần bấm Tiếp/Gửi khi để trống (chế độ Đầy đủ, bước đầu) */
+  const pr = opt.probe;
+  if (pr && N) {
+    const byI = new Map();
+    fields.forEach((f) => (f.group || [f]).forEach((g) => { if (g.fxi != null) byI.set(String(g.fxi), f); }));
+    const errs = (pr.errors || []).filter((e) => e.text && !/^\*$/.test(e.text));
+    const mapped = errs.filter((e) => e.i != null && byI.has(String(e.i)));
+    mapped.forEach((e) => { const f = byI.get(String(e.i)); f.errTexts = f.errTexts || []; if (!f.errTexts.includes(e.text)) f.errTexts.push(e.text); });
+    const native = (pr.native || []).filter((x) => byI.has(String(x.i)));
+    const dlg = pr.dialogs || [];
+    const clicked = `Bấm "${azCut(pr.clicked || 'Tiếp', 30)}" khi để trống`;
+    const GENERIC = /^(truong nay|thong tin nay|muc nay|o nay|gia tri nay)?\s*(la |la mot )?(truong )?(bat buoc|khong duoc (de )?trong|khong hop le|bat buoc nhap|can thiet)\.?!?$|^vui long (nhap|dien|chon|nhap day du|dien day du)( day du)?( thong tin)?( nay)?\.?!?$|^(required|this field is required|invalid|please fill( out)? this field|field is required)\.?$/;
+    if (pr.advanced) {
+      put('V2', 'warn', `${clicked}: form vẫn chuyển bước, không báo lỗi. Có thể form chỉ kiểm tra ở máy chủ khi gửi — hãy thử tay.`);
+      put('V4', 'warn', `${clicked}: không có tóm tắt lỗi vì form không kiểm tra ở bước này.`);
+    } else if (dlg.length) {
+      put('V2', 'fail', 'Báo lỗi bằng hộp thoại của trình duyệt (alert): che cả trang, đóng rồi là quên lỗi ở đâu.', dlg.slice(0, 3).map((d) => `"${azCut(d, 80)}"`));
+      put('V4', 'fail', `${clicked}: chỉ có hộp thoại, không có tóm tắt lỗi dẫn tới từng ô.`);
+    } else if (!errs.length && native.length) {
+      put('V2', 'warn', 'Chỉ có bong bóng báo lỗi mặc định của trình duyệt: hiện từng lỗi một, biến mất khi chạm ra ngoài, không đổi được câu chữ.', native.slice(0, 4).map((x) => `${azName(byI.get(String(x.i)))}: "${x.msg}"`));
+      put('V3', 'warn', 'Câu lỗi là câu mặc định của trình duyệt (thường bằng tiếng Anh, ví dụ "Please fill out this field"), không nói cách sửa.');
+      put('V4', 'fail', `${clicked}: không có tóm tắt lỗi ở đầu form.`);
+      native.forEach((x) => { const f = byI.get(String(x.i)); flag(f, 'V2', 'warn', `Khi để trống chỉ có bong bóng của trình duyệt: "${azCut(x.msg, 60)}".`, `Hiện câu lỗi ngay dưới nhãn, ví dụ "${azErrSuggest(f)}"; đặt [[novalidate]] trên form để tự kiểm soát cách báo lỗi.`); });
+    } else if (!errs.length) {
+      put('V2', 'fail', `${clicked}: không thấy thông báo lỗi nào — người dùng không biết vì sao không đi tiếp được.`);
+      put('V4', 'fail', `${clicked}: không có tóm tắt lỗi.`);
+    } else {
+      const far = errs.length - mapped.length;
+      put('V2', far > errs.length / 2 ? 'warn' : 'pass', far > errs.length / 2 ? `${clicked}: ${far}/${errs.length} câu lỗi không nằm sát trường bị lỗi.` : `${clicked}: ${mapped.length} câu lỗi hiện ngay tại trường. Kiểm tra thêm có biểu tượng, không chỉ dựa vào màu đỏ.`, errs.slice(0, 4).map((e) => `"${azCut(e.text, 70)}"`));
+      const gen = [...new Set(errs.map((e) => e.text).filter((t) => GENERIC.test(fold(t).trim())))];
+      const shout = [...new Set(errs.map((e) => e.text).filter((t) => /!/.test(t) || caps(t)))];
+      if (gen.length || shout.length) put('V3', 'warn', 'Câu lỗi chung chung, không nói cần nhập gì hoặc nhập thế nào.', [...gen, ...shout].slice(0, 5).map((t) => `"${azCut(t, 70)}"`));
+      else put('V3', 'pass', 'Câu lỗi nói rõ theo từng trường.', [...new Set(errs.map((e) => e.text))].slice(0, 4).map((t) => `"${azCut(t, 70)}"`));
+      fields.filter((f) => f.errTexts && f.errTexts.some((t) => GENERIC.test(fold(t).trim()) || /!/.test(t) || caps(t))).forEach((f) => flag(f, 'V3', 'warn', `Khi để trống, form báo "${azCut(f.errTexts[0], 60)}" — không nói rõ cần làm gì.`, `Viết theo loại trường: "${azErrSuggest(f)}".`));
+      if (pr.summary) put('V4', 'pass', `Có khối tóm tắt lỗi ở đầu: "${azCut(pr.summary.text, 80)}"${pr.focus === 'summary' ? ', focus chuyển vào khối này' : ''}.`);
+      else put('V4', errs.length >= 3 ? 'fail' : 'warn', `${clicked}: có ${errs.length} lỗi tại trường nhưng không có khối tóm tắt ở đầu form/bước${pr.focus === 'field' ? ' (focus nhảy tới ô lỗi đầu tiên)' : ''}.`);
+      if (pr.ariaInvalid && pr.described) put('V9', 'pass', `Ô lỗi có aria-invalid và câu lỗi được gắn bằng aria-describedby (${pr.described} ô).`);
+      else {
+        put('V9', 'warn', 'Ô lỗi chưa có aria-invalid hoặc câu lỗi chưa gắn bằng aria-describedby: trình đọc màn hình không đọc lỗi khi vào ô.');
+        mapped.map((e) => byI.get(String(e.i))).filter((f, i, a) => a.indexOf(f) === i).forEach((f) => flag(f, 'V9', 'warn', 'Câu lỗi chưa gắn vào ô: trình đọc màn hình không đọc lỗi khi người dùng quay lại ô này.', `Khi báo lỗi: đặt [[aria-invalid="true"]] cho ô và thêm id của câu lỗi vào [[aria-describedby]].`));
+      }
+    }
+    if (pr.typing && pr.typing.length) put('V1', 'warn', 'Báo lỗi khi người dùng đang gõ dở (chưa rời ô).', pr.typing.map((t) => `"${azCut(t, 70)}"`));
+    else if (pr.stale && pr.stale.length) {
+      put('V1', 'warn', 'Đã điền đúng nhưng câu lỗi vẫn còn, chỉ mất khi bấm Tiếp lần nữa.', [...new Set(pr.stale)].slice(0, 4).map((t) => `"${azCut(t, 70)}"`));
+      fields.filter((f) => f.errTexts && f.errTexts.some((t) => pr.stale.includes(t))).forEach((f) => flag(f, 'V1', 'warn', 'Đã điền đúng nhưng câu lỗi vẫn hiện.', 'Khi ô đang báo lỗi, kiểm tra lại ngay khi người dùng sửa (sự kiện input) và ẩn lỗi khi đã đúng.'));
+    } else if (errs.length) put('V1', 'manual', 'Đã thấy cách báo lỗi khi bấm gửi. Còn phải thử: gõ dở rồi rời ô, sửa đúng thì lỗi có mất ngay không.');
+  }
 
   /* ===== B · Nút ===== */
   const generic = /^(ok|submit|send|xac nhan|dong y|click|enter|go|gui di|chap nhan|yes|co)$/;
@@ -539,6 +766,7 @@ function azAnalyzePage(html, opt = {}) {
       if (h < 24) tiny.push([t, h]); else if (h < 44) small.push([t, h]);
     });
     const nm2 = ([t, h]) => `${t.btn ? 'Nút ' : ''}${azCut(t.optLabel || t.label || t.name || 'không tên', 36)} — ${Math.round(h)}px`;
+    [...tiny.map((x) => [...x, 'fail']), ...small.map((x) => [...x, 'warn'])].forEach(([t, h, st]) => { if (t.btn || !t.probs && !t.head) return; flag(t, 'B6', st, `Vùng chạm cao ${Math.round(h)}px (cần từ 44px).`, ['radio', 'checkbox'].includes(t.type) ? 'Làm cả dòng chữ bấm được, cao từ 44px; các lựa chọn cách nhau ít nhất 8px.' : 'Tăng chiều cao ô lên ít nhất 44px (ví dụ [[min-height: 48px]]); các ô cách nhau ít nhất 8px.'); });
     if (tiny.length) put('B6', 'fail', `${tiny.length} mục bấm nhỏ hơn 24px, ${small.length} mục dưới 44px (đo ở màn hình 390px).`, [...tiny, ...small].slice(0, 10).map(nm2), [...tiny, ...small].map(([t]) => t).filter((t) => t.issues));
     else if (small.length) put('B6', 'warn', `${small.length} mục bấm nhỏ hơn 44px (đo ở màn hình 390px).`, small.slice(0, 10).map(nm2), small.map(([t]) => t).filter((t) => t.issues));
     else put('B6', 'pass', 'Mọi ô và nút có vùng chạm từ 44px.');
@@ -554,6 +782,8 @@ function azAnalyzePage(html, opt = {}) {
   else {
     const noReq = files.filter((f) => !/mb|kb|dinh dang|pdf|jpg|jpeg|png|doc|toi da|dung luong/.test(fold(f.hint + ' ' + f.label)));
     const noAcc = files.filter((f) => !f.accept);
+    noReq.forEach((f) => flag(f, 'U1', 'fail', 'Chưa nêu định dạng và dung lượng tệp trước khi chọn: người dùng chỉ biết sai sau khi tải.', `Thêm gợi ý dưới nhãn: "${azIsImg(f) ? 'JPG hoặc PNG, tối đa 5 MB' : 'PDF, tối đa 20 MB'}".`));
+    noAcc.forEach((f) => flag(f, 'U1', noReq.includes(f) ? 'fail' : 'warn', 'Chưa có thuộc tính accept: hộp chọn tệp hiện cả tệp sai loại.', `Thêm [[accept="${azIsImg(f) ? 'image/jpeg,image/png' : '.pdf'}"]].`));
     if (noReq.length) put('U1', 'fail', 'Chưa nêu định dạng và dung lượng tệp trước khi chọn.', names(noReq), noReq);
     else if (noAcc.length) put('U1', 'warn', 'Đã nêu yêu cầu, nhưng ô chọn tệp chưa có thuộc tính accept để lọc tệp.', names(noAcc), noAcc);
     else put('U1', 'pass', 'Yêu cầu tệp hiển thị sẵn, có accept.');
@@ -582,6 +812,8 @@ function azAnalyzePage(html, opt = {}) {
   const cons = of('consent'), mkt = of('marketing');
   const combined = cons.filter((f) => /khuyen mai|quang cao|nhan tin|ban tin|newsletter|marketing|uu dai|doi tac/.test(fold(f.label)));
   const preC = [...cons, ...mkt].filter((f) => f.checked);
+  preC.forEach((f) => flag(f, 'R2', 'fail', 'Ô đồng ý đã được tích sẵn.', 'Bỏ tích sẵn; người dùng phải tự tích.'));
+  combined.forEach((f) => flag(f, 'R2', 'fail', 'Gộp đồng ý điều khoản với nhận quảng cáo trong một ô: muốn dự thi thì buộc phải nhận quảng cáo.', 'Tách hai ô: "Tôi đồng ý với Thể lệ" (bắt buộc) và "Tôi muốn nhận tin…" (không bắt buộc, không tích sẵn).'));
   if (preC.length || combined.length) put('R2', 'fail', 'Ô đồng ý chưa đúng: chọn sẵn hoặc gộp nhiều mục đích.', [...names(preC, () => ' — đã tích sẵn'), ...names(combined, () => ' — gộp điều khoản với nhận quảng cáo')], [...preC, ...combined]);
   else if (cons.length) put('R2', 'pass', 'Ô đồng ý không chọn sẵn, tách theo mục đích.');
   else put('R2', 'manual', 'Không thấy ô đồng ý điều khoản trên trang này (có thể ở bước cuối).');
@@ -593,7 +825,7 @@ function azAnalyzePage(html, opt = {}) {
   else {
     const ev = [];
     if (boxesRow.length) ev.push(`Mã OTP chia thành ${boxesRow[0].length} ô riêng — kiểm tra dán cả chuỗi`);
-    otp.filter((f) => f.ac !== 'one-time-code').forEach((f) => ev.push(`${azName(f)}: thiếu autocomplete="one-time-code"`));
+    otp.filter((f) => f.ac !== 'one-time-code').forEach((f) => { ev.push(`${azName(f)}: thiếu autocomplete="one-time-code"`); flag(f, 'R3', 'warn', 'Thiếu [[autocomplete="one-time-code"]]: không tự điền mã từ tin nhắn.', 'Thêm [[autocomplete="one-time-code" inputmode="numeric"]]; một ô nhận dán cả chuỗi.'); });
     put('R3', ev.length ? 'warn' : 'pass', ev.length ? 'Ô OTP chưa tối ưu.' : 'Ô OTP hỗ trợ tự điền từ SMS.', ev, otp);
   }
 
@@ -610,6 +842,7 @@ function azAnalyzePage(html, opt = {}) {
     if (noZoom) ev.push(`Chặn phóng to: viewport "${azCut(vp, 70)}"`);
     if (smallFs.length) ev.push(...names(smallFs.slice(0, 8), (f) => ` — chữ ${f.m.fs}px`));
     put('M1', ev.length ? 'fail' : 'pass', ev.length ? `${smallFs.length} ô có chữ nhỏ hơn 16px${noZoom ? ', trang chặn phóng to' : ''}.` : 'Chữ trong ô từ 16px, không chặn phóng to.', ev, smallFs);
+    smallFs.forEach((f) => flag(f, 'M1', 'fail', `Chữ trong ô ${f.m.fs}px: iPhone tự phóng to khi chạm vào, khó đọc trên điện thoại.`, 'Đặt [[font-size: 16px]] trở lên cho ô nhập.'));
   } else {
     const fsm = css.match(/(input|select|textarea)[^{]*\{[^}]*font-size\s*:\s*(\d+(\.\d+)?)px/i);
     const ev = [];
@@ -633,13 +866,18 @@ function azAnalyzePage(html, opt = {}) {
     const byI = Object.fromEntries((metrics.controls || []).map((c) => [String(c.i), c]));
     const none = metrics.focus.filter((f) => { const b = byI[f.i] && byI[f.i].base; if (!b) return false; const ring = f.os !== 'none' && f.ow >= 1; return !ring && f.sh === b.sh && f.bc === b.bc && f.bg === b.bg; });
     const nm3 = (f) => { const el = doc.querySelector(`[data-fx-i="${f.i}"]`); const fd = fields.find((x) => x.el === el); return fd ? azName(fd) : (el ? azCut(btnText(el) || el.getAttribute('name') || f.tag, 36) : f.tag); };
-    if (none.length) put('A1', 'fail', `${none.length}/${metrics.focus.length} điều khiển không hiện dấu focus khi dùng phím Tab.`, [...new Set(none.map(nm3))].slice(0, 8));
+    if (none.length) {
+      put('A1', 'fail', `${none.length}/${metrics.focus.length} điều khiển không hiện dấu focus khi dùng phím Tab.`, [...new Set(none.map(nm3))].slice(0, 8));
+      none.forEach((x) => { const el = doc.querySelector(`[data-fx-i="${x.i}"]`); const fd = el && fields.find((f) => f.el === el || (f.group && f.group.some((g) => g.el === el))); if (fd) flag(fd, 'A1', 'fail', 'Dùng phím Tab tới ô này không thấy dấu focus: người dùng bàn phím không biết mình đang ở đâu.', 'Thêm kiểu [[:focus-visible]], ví dụ [[outline: 3px solid #1f6feb; outline-offset: 2px]].'); });
+    }
     else put('A1', 'pass', `Thử Tab qua ${metrics.focus.length} điều khiển: đều có dấu focus.`);
   } else if (/outline\s*:\s*(none|0)/i.test(css) && !/:focus-visible/.test(css)) put('A1', 'warn', 'CSS có "outline: none" mà không có kiểu :focus-visible thay thế.', [azCut((css.match(/[^;{}]*outline\s*:\s*(none|0)[^;}]*/i) || [''])[0], 70)]);
   else put('A1', 'manual', 'Rút chuột, dùng phím Tab qua toàn bộ form.');
   const rgNo = fields.filter((f) => f.type === 'radio' && f.group && f.group.length > 1 && f.groupSrc !== 'legend');
   const orphan = fields.filter((f) => ['orphan'].includes(f.labelSrc));
   const fake = Array.from(doc.querySelectorAll('div[onclick],span[onclick]')).filter((e) => !e.getAttribute('role') && azClean(e.textContent).length < 40).length;
+  orphan.forEach((f) => flag(f, 'A2', 'fail', 'Nhãn không gắn với ô (thiếu for/id): bấm nhãn không vào ô, trình đọc màn hình không đọc nhãn.', `Thêm [[for="${azIdOf(f)}"]] cho nhãn và [[id="${azIdOf(f)}"]] cho ô.`));
+  rgNo.forEach((f) => flag(f, 'A2', 'fail', 'Nhóm lựa chọn thiếu fieldset/legend: trình đọc màn hình không đọc câu hỏi.', 'Bọc nhóm trong [[<fieldset>]], câu hỏi đặt trong [[<legend>]].'));
   if (rgNo.length || orphan.length) put('A2', 'fail', 'Cấu trúc HTML chưa đúng cho trình đọc màn hình.', [...names(orphan, () => ' — nhãn không gắn với ô (thiếu for/id)'), ...names(rgNo, () => ' — nhóm radio thiếu fieldset/legend')], [...orphan, ...rgNo]);
   else if (fake) put('A2', 'warn', `${fake} phần tử div/span có onclick nhưng không có role — có thể là nút giả.`);
   else put('A2', N ? 'pass' : 'na', 'Nhãn gắn đúng ô, nhóm radio có fieldset/legend.');
@@ -656,6 +894,9 @@ function azAnalyzePage(html, opt = {}) {
     });
     const r1 = (c) => (Math.floor(c * 10) / 10).toFixed(1).replace('.', ',');
     const ev = [...lowT.slice(0, 4).map(([f, c]) => `Nhãn "${azName(f)}": ${r1(c)}:1 (cần 4,5:1)`), ...lowB.slice(0, 4).map(([f, c]) => `Viền ô "${azName(f)}": ${r1(c)}:1 (cần 3:1)`), ...lowP.slice(0, 3).map(([f, c]) => `Placeholder "${azName(f)}": ${r1(c)}:1`)];
+    lowT.forEach(([f, c]) => flag(f, 'A3', 'fail', `Chữ nhãn tương phản ${r1(c)}:1 (cần 4,5:1): khó đọc ngoài nắng, với người mắt kém.`, 'Đậm màu chữ nhãn, ví dụ [[#3D4553]] trên nền trắng.'));
+    lowB.forEach(([f, c]) => flag(f, 'A3', 'fail', `Viền ô tương phản ${r1(c)}:1 (cần 3:1): khó thấy ô nhập ở đâu.`, 'Đậm màu viền, ví dụ [[#8A94A6]] (3:1 trên nền trắng) hoặc đậm hơn.'));
+    lowP.forEach(([f, c]) => flag(f, 'A3', 'warn', `Chữ mờ trong ô tương phản ${r1(c)}:1.`, 'Đậm màu placeholder, hoặc bỏ placeholder và dùng dòng gợi ý dưới nhãn.'));
     if (lowT.length || lowB.length) put('A3', 'fail', `${lowT.length} nhãn và ${lowB.length} viền ô không đủ tương phản.`, ev, [...lowT, ...lowB].map(([f]) => f));
     else if (lowP.length) put('A3', 'warn', 'Placeholder có tương phản thấp.', ev, lowP.map(([f]) => f));
     else put('A3', N ? 'pass' : 'na', 'Nhãn và viền ô đủ tương phản.');
@@ -679,13 +920,22 @@ function azAnalyzePage(html, opt = {}) {
   else put('P2', contact ? 'pass' : 'warn', contact ? 'Có kênh liên hệ hỗ trợ trên trang.' : 'Không thấy email hoặc hotline hỗ trợ trên trang.');
   put('P3', 'manual', 'Kiểm tra trang xác nhận và email che bớt CCCD, số điện thoại.');
 
+  /* Bản xem trước (khi không có ảnh chụp): đánh số từng ô, bỏ mọi script/khung nhúng */
+  if (opt.preview) {
+    fields.forEach((f) => (f.group || [f]).forEach((g) => g.el.setAttribute('data-az-i', String(f.n))));
+    doc.querySelectorAll('script, noscript, iframe, object, embed, meta[http-equiv]').forEach((x) => x.remove());
+    doc.querySelectorAll('*').forEach((el) => Array.from(el.attributes).forEach((a) => { if (/^on/i.test(a.name) || (/^(href|src|action|formaction)$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) el.removeAttribute(a.name); }));
+    if (opt.url && doc.head) { const b = doc.createElement('base'); b.setAttribute('href', opt.url); doc.head.prepend(b); }
+    info.preview = '<!DOCTYPE html>' + doc.documentElement.outerHTML;
+  }
   return { R, info };
 }
 
 /* ---------- Gộp nhiều trang (nhiều bước) ---------- */
 const AZ_ANY_PASS = new Set(['F1', 'F6', 'P1', 'P2', 'D5', 'R2', 'F3', 'F4']);
-function azMerge(pages) {
+function azMerge(pages, labels) {
   if (pages.length === 1) return pages[0].R;
+  const lab = (i) => (labels && labels[i]) || `Bước ${i + 1}`;
   const out = {};
   const ord = { fail: 0, warn: 1, pass: 2, manual: 3, na: 4 };
   RULES.forEach((r) => {
@@ -693,9 +943,11 @@ function azMerge(pages) {
     let pick;
     if (AZ_ANY_PASS.has(r.id) && rs.some((x) => x.st === 'pass')) pick = rs.find((x) => x.st === 'pass');
     else pick = rs.slice().sort((a, b) => ord[a.st] - ord[b.st])[0];
-    const ev = [];
-    if (['fail', 'warn'].includes(pick.st)) rs.filter((x) => x.st === pick.st).forEach((x) => (x.ev.length ? x.ev : [x.msg]).forEach((e) => ev.push(`Bước ${x.i + 1}: ${e}`)));
-    out[r.id] = { st: pick.st, msg: pick.msg, ev: ev.length ? ev : pick.ev };
+    /* Gom bằng chứng giống nhau giữa các bước: "Bước 1, Bước 2: …" thay vì lặp lại */
+    const byText = new Map();
+    if (['fail', 'warn'].includes(pick.st)) rs.filter((x) => x.st === pick.st).forEach((x) => (x.ev.length ? x.ev : [x.msg]).forEach((e) => { if (!byText.has(e)) byText.set(e, []); if (!byText.get(e).includes(x.i)) byText.get(e).push(x.i); }));
+    const ev = [...byText].map(([e, is]) => (is.length === pages.length && pages.length > 1 ? `Mọi bước: ${e}` : `${is.map(lab).join(', ')}: ${e}`));
+    out[r.id] = { st: pick.st, msg: pick.msg, ev: ev.length === 1 && ev[0] === `Mọi bước: ${pick.msg}` ? [] : ev.length ? ev : pick.ev };
   });
   return out;
 }

@@ -19,6 +19,7 @@ http.createServer(async (req, res) => {
     }
     let p = path.join(root, 'site', decodeURIComponent(u.pathname));
     if (u.pathname.endsWith('/')) p = path.join(p, 'index.html');
+    else if (!path.extname(p)) p += '.html'; /* như cleanUrls của Vercel */
     const data = await readFile(p);
     res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' });
     res.end(data);

@@ -767,6 +767,104 @@ details.more summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--a
 .az-limit .ic{margin-top:3px}
 .az-confirm{background:var(--accent-soft)}
 
+/* ---------- Chấm tự động: luồng các bước, ảnh có ghim, thẻ từng trường ---------- */
+.az-bar{align-items:center}
+.az-flow{border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:12px;background:var(--surface);padding:14px 16px;display:grid;gap:12px}
+.az-flow.part{border-left-color:var(--warn)}
+.az-flow-h{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--ink-2)}
+.az-flow-h b{color:var(--ink)}
+.az-flow-h .ic{flex:none;margin-top:2px;color:var(--ok)}
+.az-flow.part .az-flow-h .ic{color:var(--warn)}
+.az-flow-steps{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.az-flow-steps li{display:flex;align-items:center;gap:8px}
+.az-flow-steps li+li::before{content:"→";color:var(--muted);font-weight:700}
+.az-flow-steps button{display:grid;gap:1px;text-align:left;min-height:44px;padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.az-flow-steps button b{font-size:13.5px}
+.az-flow-steps button span{color:var(--muted)}
+.az-flow-steps button:hover{border-color:var(--line-strong)}
+.az-flow-stop{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1px dashed var(--line-strong);border-radius:10px;color:var(--muted);font-size:13px}
+.az-flow-d{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--muted)}
+.az-flow-d .ic{flex:none;margin-top:2px}
+.az-fbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:6px}
+.az-legend{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13px;color:var(--muted)}
+.az-legend i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:-6px;vertical-align:-1px}
+/* Ghim nằm trên ảnh chụp (nền sáng) nên dùng màu cố định, không đổi theo giao diện tối */
+.az-legend i.st-fail,.az-pin.st-fail,.az-num.st-fail{background:#C22929;color:#fff}
+.az-legend i.st-warn,.az-pin.st-warn,.az-num.st-warn{background:#F2B650;color:#1d1400}
+.az-legend i.st-pass,.az-pin.st-pass,.az-num.st-pass{background:#16774A;color:#fff}
+.az-step{display:grid;gap:12px;padding:18px 0;border-top:1px solid var(--line);scroll-margin-top:calc(var(--hdr) + 16px)}
+.az-step-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;font-size:17px;outline:none}
+.az-step-n{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:var(--ink);color:var(--surface);font-size:13px;font-weight:700}
+.az-step-t{overflow-wrap:anywhere}
+.az-step-c{font-size:13.5px;font-weight:500}
+.az-step-g{display:grid;grid-template-columns:minmax(240px,330px) minmax(0,1fr);gap:20px;align-items:start}
+.az-shotcol{position:sticky;top:calc(var(--hdr) + 12px);max-height:calc(100vh - var(--hdr) - 24px);overflow:auto;border-radius:18px;border:6px solid var(--ink);background:var(--surface-2);overscroll-behavior:contain}
+.az-shotwrap{position:relative;width:100%;overflow:hidden;background:#fff}
+.az-shotwrap.is-none{aspect-ratio:390/500;display:grid;place-items:center;background:var(--surface-2)}
+.az-shot-img{display:block;width:100%;height:auto}
+.az-prev{position:absolute;left:0;top:0;width:390px;height:600px;border:0;transform-origin:0 0;pointer-events:none;background:#fff}
+.az-noshot{display:grid;justify-items:center;gap:8px;padding:20px;text-align:center;font-size:13.5px;color:var(--muted)}
+.az-pins{position:absolute;inset:0}
+.az-box{position:absolute;border:2px solid var(--line-strong);border-radius:4px;pointer-events:none;transition:box-shadow .15s}
+.az-box.st-fail{border-color:var(--err)} .az-box.st-warn{border-color:var(--warn)} .az-box.st-pass{border-color:var(--ok);border-style:dashed;opacity:.7}
+.az-box.hl{box-shadow:0 0 0 4px var(--mark)}
+.az-pin{position:absolute;transform:translate(-70%,-55%);min-width:26px;height:26px;padding:0 5px;border-radius:13px;border:2px solid #fff;color:#fff;font:700 12.5px var(--f-body);display:grid;place-items:center;cursor:pointer;box-shadow:0 1px 4px rgb(0 0 0 / .35);z-index:1}
+.az-pin.hl,.az-pin:focus-visible{outline:3px solid var(--mark);outline-offset:1px;z-index:2}
+.az-pin::after{content:"";position:absolute;inset:-9px}
+.az-cards{display:grid;gap:12px;min-width:0}
+.az-fc{border:1px solid var(--line);border-left:4px solid var(--line-strong);border-radius:12px;background:var(--surface);padding:12px 14px;display:grid;gap:10px;outline:none;scroll-margin:calc(var(--hdr) + 20px)}
+.az-fc.st-fail{border-left-color:var(--err)} .az-fc.st-warn{border-left-color:var(--warn)} .az-fc.st-pass{border-left-color:var(--ok)}
+.az-fc:focus-visible{box-shadow:0 0 0 3px var(--ring)}
+.az-fc.flash{animation:azflash 1.4s ease}
+@keyframes azflash{0%,40%{box-shadow:0 0 0 4px var(--mark)}100%{box-shadow:0 0 0 0 transparent}}
+@media (prefers-reduced-motion: reduce){.az-fc.flash{animation:none;box-shadow:0 0 0 4px var(--mark)}}
+.az-fc-h{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
+.az-num{min-width:32px;height:32px;padding:0 6px;border-radius:16px;border:0;color:#fff;font:700 13.5px var(--f-body);cursor:pointer}
+.az-num:disabled{cursor:default;opacity:.7}
+.az-fc-t h4{font-size:15.5px;overflow-wrap:anywhere}
+.az-fc-t p{font-size:13px;color:var(--muted)}
+.az-fc-badge{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.az-fc-badge.st-fail{background:var(--err-soft);color:var(--err)} .az-fc-badge.st-warn{background:var(--warn-soft);color:var(--warn)} .az-fc-badge.st-pass{background:var(--ok-soft);color:var(--ok)}
+.az-probs{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.az-probs li{display:grid;gap:5px;padding-top:10px;border-top:1px solid var(--line)}
+.az-pt{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:14px}
+.az-pt .az-st{height:22px;font-size:12px;padding:0 8px}
+.az-probs .st-fail .az-st,.az-gc.st-fail .az-st{background:var(--err-soft);color:var(--err)}
+.az-probs .st-warn .az-st,.az-gc.st-warn .az-st{background:var(--warn-soft);color:var(--warn)}
+.az-pp{display:grid;grid-template-columns:74px minmax(0,1fr);gap:8px;font-size:14px;line-height:1.5;color:var(--ink-2)}
+.az-pp>span:last-child{overflow-wrap:anywhere}
+.az-lb{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding-top:2px}
+.az-errs{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--ink-2);background:var(--surface-2);border-radius:8px;padding:8px 10px}
+.az-errs .ic{flex:none;margin-top:2px;color:var(--err)}
+.az-code{border-top:1px solid var(--line);padding-top:8px}
+.az-code>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;min-height:36px;font-size:13.5px;font-weight:600;color:var(--accent)}
+.az-code>summary::-webkit-details-marker{display:none}
+.az-code>summary .chev{transition:transform .15s}
+.az-code[open]>summary .chev{transform:rotate(180deg)}
+.az-code-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:6px}
+.az-code-l{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.az-code pre code{background:none;border:0;padding:0;border-radius:0;font:inherit;white-space:pre;color:inherit}
+.az-code pre{position:relative;margin:0;padding:10px 12px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);font:12.5px/1.55 var(--f-mono);overflow:auto;white-space:pre;max-height:280px}
+.az-allok{padding:10px 0}
+.az-gl{display:grid;gap:10px;padding-top:18px;border-top:1px solid var(--line)}
+.az-gl-hd{font-size:17px}
+.az-gl-list{display:grid;gap:10px}
+.az-gc{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:12px;background:var(--surface);padding:12px 14px;display:grid;gap:8px}
+.az-gc.st-fail{border-left-color:var(--err)}
+.az-more{display:inline-flex;align-items:center;gap:4px;font-size:13.5px;font-weight:600;width:fit-content}
+.az-manual{display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--ink-2)}
+.az-manual .ic{flex:none;margin-top:3px}
+.az-filter{margin-bottom:6px}
+@media (max-width: 860px){
+  .az-step-g{grid-template-columns:minmax(0,1fr)}
+  .az-shotcol{position:relative;top:0;max-height:62vh;width:100%;max-width:340px;margin:0 auto}
+  .az-code-g{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width: 520px){
+  .az-pp{grid-template-columns:minmax(0,1fr);gap:2px}
+  .az-fc-h{grid-template-columns:auto minmax(0,1fr)}
+  .az-fc-badge{grid-column:2;justify-self:start}
+}
 /* ---------- Minh họa tĩnh ---------- */
 .mk{font-size:13px;line-height:1.45;color:var(--ink)}
 .mk-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px}
