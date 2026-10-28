@@ -73,11 +73,15 @@ function azHidden(el) {
   }
   return false;
 }
-function azOwnText(lab) {
-  const c = lab.cloneNode(true);
-  c.querySelectorAll('input,select,textarea,button,script,style').forEach((x) => x.remove());
+/* Chữ nhìn thấy: bỏ phần tử ẩn (spinner "Đang gửi…", chữ trạng thái) */
+function azVisText(node, drop = '') {
+  if (node.hasAttribute && node.hasAttribute('data-fx-txt')) return azClean(node.getAttribute('data-fx-txt'));
+  const c = node.cloneNode(true);
+  c.querySelectorAll('script,style,template,[hidden],[aria-hidden="true"]' + (drop ? ',' + drop : '')).forEach((x) => x.remove());
+  c.querySelectorAll('[style]').forEach((x) => { if (/display:none|visibility:hidden/.test((x.getAttribute('style') || '').replace(/\s+/g, '').toLowerCase())) x.remove(); });
   return azClean(c.textContent);
 }
+function azOwnText(lab) { return azVisText(lab, 'input,select,textarea,button'); }
 function azByIds(doc, ids) { return azClean(String(ids || '').split(/\s+/).filter(Boolean).map((id) => { const e = doc.getElementById(id); return e ? e.textContent : ''; }).join(' ')); }
 function azLabel(doc, el) {
   if (el.id) {
@@ -238,7 +242,7 @@ function azAnalyzePage(html, opt = {}) {
   const T = fold(bodyText);
   const css = Array.from(doc.querySelectorAll('style')).map((s) => s.textContent).join('\n') + '\n' + Array.from(doc.querySelectorAll('[style]')).map((e) => e.getAttribute('style')).join(';');
   const buttons = Array.from(doc.querySelectorAll('button, input[type=submit], input[type=button], input[type=reset], input[type=image], [role=button]')).filter((b) => !azHidden(b));
-  const btnText = (b) => azClean(b.tagName === 'INPUT' ? (b.getAttribute('value') || (b.type === 'submit' ? 'Submit' : b.type === 'reset' ? 'Reset' : '')) : (b.textContent || b.getAttribute('aria-label') || ''));
+  const btnText = (b) => azClean(b.tagName === 'INPUT' ? (b.getAttribute('value') || (b.type === 'submit' ? 'Submit' : b.type === 'reset' ? 'Reset' : '')) : (azVisText(b) || b.getAttribute('aria-label') || ''));
   const submits = buttons.filter((b) => (b.tagName === 'BUTTON' && (!b.getAttribute('type') || b.getAttribute('type') === 'submit') && b.closest('form')) || (b.tagName === 'INPUT' && /submit|image/.test(b.type)));
   const primary = submits.length ? submits : buttons.filter((b) => /gui|dang ky|tiep|hoan tat|nop|xac nhan|submit|send|next|continue/.test(fold(btnText(b))));
   const resets = buttons.filter((b) => (b.getAttribute('type') || '').toLowerCase() === 'reset' || /^(nhap lai|lam lai|xoa (het|form|du lieu)|reset|clear)$/.test(fold(btnText(b))));
@@ -247,7 +251,14 @@ function azAnalyzePage(html, opt = {}) {
   const info = { title: azClean(doc.title), fields, N, forms: doc.querySelectorAll('form').length, iframes: Array.from(doc.querySelectorAll('iframe')).map((f) => f.getAttribute('src') || '').filter(Boolean) };
 
   /* Trang chặn bot / trang trống */
-  if (/just a moment|cf-chl|checking your browser|attention required|access denied|xac minh ban khong phai la robot/.test(fold(info.title + ' ' + bodyText.slice(0, 600)))) info.blocked = true;
+  if (/just a moment|cf-chl|checking your browser|attention required|access denied|verify you are human|are you a robot|unusual traffic|xac minh ban khong phai la robot/.test(fold(info.title + ' ' + bodyText.slice(0, 600)))
+    || (!N && info.iframes.some((s) => /captcha-delivery|px-captcha|perimeterx|challenges\.cloudflare|hcaptcha\.com\/captcha|recaptcha\/api2\/bframe/i.test(s)))
+    || (!N && /^(403|429|503)$/.test(String(opt.status || '')))) info.blocked = true;
+  if (opt.status >= 400) info.httpStatus = opt.status;
+  /* Ngôn ngữ trang: các tiêu chí câu chữ được viết cho tiếng Việt */
+  const vnChars = (bodyText.match(/[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/gi) || []).length;
+  const langAttr = (doc.documentElement.getAttribute('lang') || '').toLowerCase();
+  info.vi = /^vi/.test(langAttr) || vnChars >= 12 || vnChars / Math.max(1, bodyText.length) > 0.01;
 
   /* ===== F · Cấu trúc ===== */
   const prepHits = [/(\d+)\s*phut/.test(T) && 'thời gian điền', /chuan bi|can co|yeu cau (ho so|tai lieu)|tai lieu can/.test(T) && 'tài liệu cần chuẩn bị', /han (chot|cuoi|nop)|deadline|het han/.test(T) && 'hạn chót', /dieu kien|doi tuong (tham gia|du thi)/.test(T) && 'điều kiện tham gia'].filter(Boolean);
@@ -360,6 +371,7 @@ function azAnalyzePage(html, opt = {}) {
   const capItems = [...fields.map((f) => f.label), ...buttons.map(btnText), ...Array.from(doc.querySelectorAll('h1,h2,h3,legend')).map((h) => azClean(h.textContent))].filter(Boolean);
   const capsL = [...new Set(capItems.filter(caps))], titleL = [...new Set(capItems.filter(titleCase))];
   if (capsL.length) put('L7', 'fail', 'Có tiêu đề, nhãn hoặc nút viết IN HOA.', capsL.slice(0, 8).map((s) => `"${azCut(s, 40)}"`));
+  else if (titleL.length && !info.vi) put('L7', 'manual', 'Trang không viết bằng tiếng Việt: không chấm quy tắc viết hoa kiểu câu.');
   else if (titleL.length) put('L7', 'warn', 'Có chữ viết hoa mỗi từ (Title Case) — tiếng Việt nên viết hoa kiểu câu.', titleL.slice(0, 8).map((s) => `"${azCut(s, 40)}"`));
   else put('L7', 'pass', 'Chữ viết hoa kiểu câu.');
 

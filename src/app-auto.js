@@ -123,7 +123,7 @@ async function azRun(urlCtl) {
         azProgress(['Đọc mã HTML của trang', `Chấm ${RULES.length} tiêu chí`], 1);
       }
       await new Promise((r) => setTimeout(r, 30));
-      const page = azAnalyzePage(data.html, { metrics: data.metrics, url: data.finalUrl });
+      const page = azAnalyzePage(data.html, { metrics: data.metrics, url: data.finalUrl, status: data.status });
       azFinish([page], { kind: 'url', url: data.finalUrl, mode: data.mode, shot: data.screenshot || '', ms: data.ms, truncated: data.truncated, note: [note, data.note].filter(Boolean).join(' ') });
     } else if (AZ_UI.src === 'file') {
       const ctl = { id: 'az-files', el: $('#fw-az-files'), inputs: () => [$('#az-files')] };
@@ -176,7 +176,7 @@ function azGoodSample() {
 function azFinish(pages, meta) {
   const R = azMerge(pages);
   const fields = pages.flatMap((p, i) => p.info.fields.map((f) => ({ step: pages.length > 1 ? i + 1 : 0, n: azName(f), kind: AZ_KIND[f.kind] || f.kind, type: f.tag === 'input' ? f.type : f.tag === 'select' ? 'select' : f.tag, im: f.im, ac: f.ac, req: f.req, issues: [...f.issues] })));
-  const info = { title: pages[0].info.title, N: fields.length, forms: pages.reduce((a, p) => a + p.info.forms, 0), steps: pages.length, blocked: pages.some((p) => p.info.blocked), iframes: pages.flatMap((p) => p.info.iframes).filter((s) => /form|survey|typeform|jotform|google/i.test(s)).slice(0, 3) };
+  const info = { title: pages[0].info.title, N: fields.length, forms: pages.reduce((a, p) => a + p.info.forms, 0), steps: pages.length, blocked: pages.some((p) => p.info.blocked), http: pages[0].info.httpStatus || 0, vi: pages.some((p) => p.info.vi), iframes: pages.flatMap((p) => p.info.iframes).filter((s) => /form|survey|typeform|jotform|google/i.test(s)).slice(0, 3) };
   const rep = { R, fields, info, meta: { ...meta, ts: Date.now() } };
   AZ_LAST = rep;
   try { store.set('fx-az-last', rep); } catch (e) { /* bỏ qua */ }
@@ -193,7 +193,9 @@ function azDrawReport(rep) {
   const box = $('#az-report'); if (!box) return;
   const { R, info, meta } = rep;
   const s = azSummary(R);
-  const verdict = !info.N ? { k: 'none', ic: 'info', t: 'Không tìm thấy trường nhập liệu nào', d: info.blocked ? 'Trang trả về màn hình chống bot hoặc yêu cầu xác minh. Hãy lưu trang thành tệp HTML rồi tải lên.' : 'Form có thể được tạo bằng JavaScript (thử chế độ Đầy đủ), nằm trong iframe, hoặc cần đăng nhập. Bạn cũng có thể lưu trang thành tệp HTML rồi tải lên.' }
+  const verdict = !info.N && info.blocked ? { k: 'none', ic: 'alert', t: 'Trang chặn trình duyệt tự động', d: `Website trả về màn hình chống bot/CAPTCHA${info.http ? ` (mã ${info.http})` : ''} nên máy không thấy form. Mở trang bằng trình duyệt của bạn, lưu thành tệp (Ctrl+S, chọn "Trang web, toàn bộ" hoặc .mhtml) rồi dùng mục "Tệp HTML".` }
+    : !info.N && info.http ? { k: 'none', ic: 'alert', t: `Trang trả về lỗi ${info.http}`, d: info.http === 404 ? 'Không tìm thấy trang. Kiểm tra lại đường dẫn.' : info.http === 401 || info.http === 403 ? 'Trang cần đăng nhập hoặc không cho truy cập từ bên ngoài. Hãy lưu trang thành tệp HTML rồi tải lên.' : 'Máy chủ của trang đang lỗi. Thử lại sau, hoặc lưu trang thành tệp HTML rồi tải lên.' }
+    : !info.N ? { k: 'none', ic: 'info', t: 'Không tìm thấy trường nhập liệu nào', d: info.blocked ? 'Trang trả về màn hình chống bot hoặc yêu cầu xác minh. Hãy lưu trang thành tệp HTML rồi tải lên.' : 'Form có thể được tạo bằng JavaScript (thử chế độ Đầy đủ), nằm trong iframe, hoặc cần đăng nhập. Bạn cũng có thể lưu trang thành tệp HTML rồi tải lên.' }
     : s.mustFail ? { k: 'bad', ic: 'alert', t: `Chưa đạt chuẩn: ${s.mustFail} tiêu chí Bắt buộc chưa đạt`, d: 'Sửa các mục "Chưa đạt" mức Bắt buộc trước khi ra mắt.' }
       : s.fail ? { k: 'mid', ic: 'clock', t: 'Đạt mức tối thiểu, còn mục cần sửa', d: `${s.fail} tiêu chí mức Nên/Cân nhắc chưa đạt.` }
         : { k: 'good', ic: 'ok', t: 'Không phát hiện lỗi tự động', d: 'Tiếp tục thử tay các tiêu chí còn lại để kết luận.' };
@@ -202,6 +204,8 @@ function azDrawReport(rep) {
   const notes = [];
   if (meta.note) notes.push(meta.note);
   if (meta.truncated) notes.push('Trang quá lớn, chỉ phân tích 3 MB đầu.');
+  if (info.N && info.vi === false) notes.push('Trang không viết bằng tiếng Việt. Các tiêu chí câu chữ (nhãn, thông báo lỗi, viết hoa) được soạn cho tiếng Việt nên chỉ mang tính tham khảo.');
+  if (info.N && info.http) notes.push(`Trang trả về mã lỗi ${info.http}. Kiểm tra đây có đúng là trang form cần chấm không.`);
   if (info.iframes.length) notes.push(`Trang nhúng form từ nơi khác (${info.iframes.map((x) => azCut(x, 50)).join(', ')}). Hãy chấm trực tiếp đường dẫn đó.`);
   if (meta.mode !== 'render') notes.push('Chế độ đọc HTML không đo được cỡ chữ, vùng chạm, tương phản, focus và bố cục cột — các tiêu chí đó được đánh dấu "Cần thử tay".');
   const cnt = (k) => RULES.filter((r) => (R[r.id] || {}).st === k).length;
@@ -217,20 +221,21 @@ function azDrawReport(rep) {
     </div>
     <div class="au-score az-score">
       <div class="au-verdict ${verdict.k}">${ic(verdict.ic, 24)}<div><b>${esc(verdict.t)}</b><span>${esc(verdict.d)}</span></div></div>
-      <div class="au-nums az-nums"><div class="au-num err"><b>${s.fail}</b><span>Chưa đạt</span></div><div class="au-num warnn"><b>${s.warn}</b><span>Cần xem lại</span></div><div class="au-num ok"><b>${s.pass}</b><span>Đạt</span></div><div class="au-num"><b>${s.manual}</b><span>Cần thử tay</span></div><div class="au-num"><b>${s.na}</b><span>Không áp dụng</span></div></div>
+      ${info.N ? `<div class="au-nums az-nums"><div class="au-num err"><b>${s.fail}</b><span>Chưa đạt</span></div><div class="au-num warnn"><b>${s.warn}</b><span>Cần xem lại</span></div><div class="au-num ok"><b>${s.pass}</b><span>Đạt</span></div><div class="au-num"><b>${s.manual}</b><span>Cần thử tay</span></div><div class="au-num"><b>${s.na}</b><span>Không áp dụng</span></div></div>
       <div><div class="au-bar-l"><span>Máy kết luận được ${s.auto + s.na}/${RULES.length} tiêu chí</span><span>${s.auto ? `Điểm tự động ${s.score}/100` : ''}</span></div>
-        <div class="meter" aria-hidden="true"><i class="m-err" style="width:${s.fail / RULES.length * 100}%"></i><i class="m-warn" style="width:${s.warn / RULES.length * 100}%"></i><i class="m-ok" style="width:${s.pass / RULES.length * 100}%"></i><i class="m-na" style="width:${s.na / RULES.length * 100}%"></i></div></div>
+        <div class="meter" aria-hidden="true"><i class="m-err" style="width:${s.fail / RULES.length * 100}%"></i><i class="m-warn" style="width:${s.warn / RULES.length * 100}%"></i><i class="m-ok" style="width:${s.pass / RULES.length * 100}%"></i><i class="m-na" style="width:${s.na / RULES.length * 100}%"></i></div></div>` : ''}
     </div>
     ${notes.length ? `<div class="f-banner info">${ic('info', 20)}<div>${notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div></div>` : ''}
-    <div class="au-actions"><div class="seg" role="group" aria-label="Lọc kết quả" id="az-f">${[['fail', 'Chưa đạt'], ['warn', 'Cần xem lại'], ['pass', 'Đạt'], ['manual', 'Cần thử tay'], ['all', 'Tất cả']].map(([k, n]) => `<button type="button" data-azf="${k}" aria-pressed="${AZ_UI.filter === k}">${n} <span class="n">${k === 'all' ? RULES.length : cnt(k)}</span></button>`).join('')}</div>
+    ${info.N ? `<div class="au-actions"><div class="seg" role="group" aria-label="Lọc kết quả" id="az-f">${[['fail', 'Chưa đạt'], ['warn', 'Cần xem lại'], ['pass', 'Đạt'], ['manual', 'Cần thử tay'], ['all', 'Tất cả']].map(([k, n]) => `<button type="button" data-azf="${k}" aria-pressed="${AZ_UI.filter === k}">${n} <span class="n">${k === 'all' ? RULES.length : cnt(k)}</span></button>`).join('')}</div>
       <div class="btn-row" id="az-acts"><button type="button" class="btn btn-pri btn-sm" id="az-import">${ic('check', 15)}Đưa vào checklist</button><button type="button" class="btn btn-sec btn-sm" id="az-md">${ic('copy', 15)}Sao chép báo cáo</button></div></div>
-    <div id="az-list"></div>
+    <div id="az-list"></div>` : ''}
     <details class="az-fields" ${info.N && info.N <= 30 ? '' : ''}><summary><h3>Các trường đã đọc được (${info.N})</h3>${ic('down', 18, 'chev')}</summary>
       <div class="qp-wrap"><table class="qp-table"><thead><tr><th scope="col">#</th><th scope="col">Nhãn</th><th scope="col">Nhận diện</th><th scope="col">type · inputmode</th><th scope="col">autocomplete</th><th scope="col">Bắt buộc</th><th scope="col">Vấn đề</th></tr></thead>
       <tbody>${rep.fields.map((f, i) => `<tr><td>${f.step ? `B${f.step}·` : ''}${i + 1}</td><td>${esc(f.n)}</td><td>${esc(f.kind)}</td><td><code>${esc(f.type)}</code>${f.im ? ` <code>${esc(f.im)}</code>` : ''}</td><td>${f.ac ? `<code>${esc(f.ac)}</code>` : '<span class="muted">—</span>'}</td><td>${f.req ? 'Có' : '<span class="muted">—</span>'}</td><td><span class="chips">${f.issues.map((id) => ruleChip(id)).join('')}</span></td></tr>`).join('') || `<tr><td colspan="7" class="muted" style="text-align:center;padding:20px">Không đọc được trường nào.</td></tr>`}</tbody></table></div>
     </details>
-    <p class="muted az-limit">${ic('info', 15)} Máy chỉ thấy những gì có trong mã trang (và trang hiển thị ở chế độ Đầy đủ). Hành vi khi gõ, báo lỗi, tải tệp, gửi hồ sơ, trang xác nhận phải thử tay — xem <a href="#kiem-thu">Kịch bản kiểm thử</a>. Công cụ không bấm gửi form thật.</p>
+    <p class="muted az-limit">${ic('info', 15)}<span>Máy chỉ thấy những gì có trong mã trang (và trang hiển thị ở chế độ Đầy đủ). Hành vi khi gõ, báo lỗi, tải tệp, gửi hồ sơ, trang xác nhận phải thử tay — xem <a href="#kiem-thu">Kịch bản kiểm thử</a>. Công cụ không bấm gửi form thật.</span></p>
   </section>`;
+  if (!info.N) return;
   azDrawList(rep);
   $('#az-f').addEventListener('click', (e) => { const b = e.target.closest('[data-azf]'); if (!b) return; AZ_UI.filter = b.dataset.azf; $$('#az-f [data-azf]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); azDrawList(rep); });
   $('#az-md').addEventListener('click', () => copyText(azMarkdown(rep), 'Đã sao chép báo cáo chấm tự động'));

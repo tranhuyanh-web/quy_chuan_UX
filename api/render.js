@@ -32,6 +32,7 @@ function measure(pass) {
     const o = { i, vis, r: R(el.getBoundingClientRect()) };
     if (pass === 'desktop') return o;
     el.setAttribute('data-fx-vis', vis ? '1' : '0');
+    if (el.tagName === 'BUTTON') el.setAttribute('data-fx-txt', (el.innerText || '').trim().slice(0, 120));
     o.fs = parseFloat(cs.fontSize);
     o.color = cs.color; o.bg = bgOf(el); o.pbg = bgOf(el.parentElement || el);
     const bw = ['Top', 'Right', 'Bottom', 'Left'].map((s) => [parseFloat(cs['border' + s + 'Width']) || 0, cs['border' + s + 'Color']]).sort((a, b) => b[0] - a[0])[0];
