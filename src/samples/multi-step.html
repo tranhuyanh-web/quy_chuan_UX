@@ -21,12 +21,16 @@
   .check label { font-weight: 400; display: flex; gap: 8px; align-items: flex-start; }
   .check input { width: auto; margin-top: 3px; }
   [hidden] { display: none !important; }
+  .count { color: #9f224e; font-size: 14px; margin-bottom: 12px; }
+  .alert { background: #fdecef; color: #b0102c; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Đăng ký Cuộc thi Ý tưởng Xanh 2026</h1>
   <div class="steps" id="ind">Bước 1/3 · Thông tin thí sinh</div>
+  <div class="count" id="count" hidden>Còn <b id="cd-d">12</b> <span class="cd-l">Ngày</span> <b id="cd-h">05</b> <span class="cd-l">Giờ</span> <b id="cd-m">30</b> <span class="cd-l">Phút</span> <b id="cd-s">10</b> <span class="cd-l">Giây</span></div>
+  <div class="alert" id="login-msg" role="alert" hidden>Vui lòng đăng nhập tài khoản để tiếp tục. Dữ liệu bạn đã nhập vẫn được giữ.</div>
   <form class="card" id="f" novalidate>
     <section data-step="1">
       <div class="row"><label for="hoten">Họ và tên *</label><input id="hoten" name="hoten" autocomplete="name" required></div>
@@ -84,7 +88,20 @@
     });
     return ok;
   }
-  document.getElementById('next').addEventListener('click', function () { if (valid(step)) { step++; show(); } });
+  /* ?login=1: form đòi đăng nhập ở bước 1 (mô phỏng form cần tài khoản MyVnE); có đồng hồ đếm ngược chữ đỏ */
+  var needLogin = /[?&]login=1/.test(location.search);
+  if (needLogin) {
+    document.getElementById('count').hidden = false;
+    var left = 12 * 86400 + 5 * 3600 + 30 * 60 + 10;
+    setInterval(function () { left--; var p = function (n) { return (n < 10 ? '0' : '') + n; };
+      document.getElementById('cd-d').textContent = p(Math.floor(left / 86400)); document.getElementById('cd-h').textContent = p(Math.floor(left % 86400 / 3600));
+      document.getElementById('cd-m').textContent = p(Math.floor(left % 3600 / 60)); document.getElementById('cd-s').textContent = p(left % 60); }, 1000);
+  }
+  document.getElementById('next').addEventListener('click', function () {
+    if (!valid(step)) return;
+    if (needLogin && step === 1 && !/(^|;\s*)demo_login=1/.test(document.cookie)) { document.getElementById('login-msg').hidden = false; return; }
+    document.getElementById('login-msg').hidden = true; step++; show();
+  });
   document.getElementById('back').addEventListener('click', function () { step--; show(); });
   f.addEventListener('submit', function (e) {
     e.preventDefault();

@@ -115,6 +115,18 @@ function ageAt(b, ref) {
    cfg: { id, label, hint, required, emptyMsg, kind, ... , ann: 'V1 I3' }
    Mỗi controller: { id, el, get(), set(v), validate(force), focus(), visible() }
    ============================================================ */
+/* Không làm xê dịch bố cục khi người dùng đang nhấn chuột hoặc chạm: câu lỗi, ghi chú hiện ra lúc rời ô
+   sẽ chờ tới khi cú bấm xong. Nếu không, nút bên dưới bị đẩy đi giữa lúc nhấn và thả, cú bấm trượt. */
+let PTR_DOWN = false;
+const PTR_Q = [];
+const ptrFlush = () => { PTR_DOWN = false; setTimeout(() => { while (PTR_Q.length) PTR_Q.shift()(); }, 0); };
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', () => { PTR_DOWN = true; }, true);
+  document.addEventListener('pointerup', ptrFlush, true);
+  document.addEventListener('pointercancel', ptrFlush, true);
+}
+const afterPointer = (fn) => (PTR_DOWN ? PTR_Q.push(fn) : fn());
+
 function annHTML(ann) {
   if (!ann) return '';
   return ann.split(/\s+/).map((id) => `<button type="button" class="ann" data-ann="${id}" tabindex="-1" aria-label="Nguyên tắc ${id}">${id}</button>`).join('');
@@ -260,7 +272,7 @@ function mountText(c, root) {
     updCount();
     c.onInput && c.onInput(ctl);
   });
-  inp.addEventListener('blur', () => {
+  inp.addEventListener('blur', () => afterPointer(() => {
     if (!inp.value.trim()) { if (ctl.errShown) ctl.validate(); return; }
     ctl.touched = true;
     const rawBefore = inp.value;
@@ -274,7 +286,7 @@ function mountText(c, root) {
     ctl.validate();
     if (c.norm !== 'name') showNote(rawBefore);
     c.onChange && c.onChange(ctl);
-  });
+  }));
   updCount();
   return ctl;
 }
@@ -321,13 +333,15 @@ function mountDob(c, root) {
   });
   el.addEventListener('focusout', (e) => {
     if (el.contains(e.relatedTarget)) return;
-    const v = vals();
-    if (!v.d && !v.m && !v.y) { if (ctl.errShown) ctl.validate(); return; }
-    ctl.touched = true;
-    if (v.d.length === 1) ins.d.value = '0' + v.d;
-    if (v.m.length === 1) ins.m.value = '0' + v.m;
-    ctl.validate();
-    c.onChange && c.onChange(ctl);
+    afterPointer(() => {
+      const v = vals();
+      if (!v.d && !v.m && !v.y) { if (ctl.errShown) ctl.validate(); return; }
+      ctl.touched = true;
+      if (v.d.length === 1) ins.d.value = '0' + v.d;
+      if (v.m.length === 1) ins.m.value = '0' + v.m;
+      ctl.validate();
+      c.onChange && c.onChange(ctl);
+    });
   });
   return ctl;
 }
@@ -503,7 +517,7 @@ function mountCombo(c, root) {
     inp.focus();
   });
   inp.addEventListener('blur', () => {
-    setTimeout(() => {
+    setTimeout(() => afterPointer(() => {
       if (document.activeElement === inp) return;
       close();
       const v = inp.value.trim();
@@ -518,7 +532,7 @@ function mountCombo(c, root) {
       }
       ctl.touched = true;
       ctl.validate();
-    }, 120);
+    }), 120);
   });
   return ctl;
 }

@@ -242,6 +242,8 @@ function readErrors(before) {
     for (let n = el, k = 0; n && k < 3; n = n.parentElement, k++) { if (ERRC.test((n.className && n.className.baseVal !== undefined ? n.className.baseVal : n.className) || '') || ERRC.test(n.id || '') || /alert/.test(n.getAttribute('role') || '') || n.getAttribute('aria-live')) { looks = true; break; } }
     if (!isNew && !looks) continue;
     if (!looks && !red(cs.color)) continue;
+    /* Bỏ chữ ngắn không mang nghĩa báo lỗi: nhãn đồng hồ đếm ngược ("Ngày", "Giờ"), số, ký hiệu */
+    if (!/vui lòng|không|chưa|bắt buộc|sai|lỗi|hợp lệ|cần |phải|tối đa|tối thiểu|ít nhất|đã tồn tại|đã được|đăng nhập|please|required|invalid|must|error|incorrect|wrong|log ?in|sign ?in/i.test(t) && (t.split(/\s+/).length < 3 || /^[\d\s:.,/-]+$/.test(t))) continue;
     seenEl.add(el);
     const c = nearest(el);
     errs.push({ text: t, i: c ? c.getAttribute('data-fx-i') : null, y: Math.round(el.getBoundingClientRect().top + scrollY), red: red(cs.color), isNew });
@@ -362,6 +364,20 @@ function guardCheck() {
   return { payment, captcha, otp };
 }
 
+/* Trang hoặc cửa sổ đăng nhập (không phải form đăng ký có ô tạo mật khẩu) */
+function loginWall() {
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
+  const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 1 && r.height > 1 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+  const u = location.href.toLowerCase();
+  if (/accounts\.google\.com|facebook\.com\/(login|dialog)|appleid\.apple\.com|login\.microsoftonline/.test(u)) return true;
+  const pw = Array.from(document.querySelectorAll('input[type=password]')).filter(vis);
+  if (!pw.length) return false;
+  if (/login|signin|sign-in|dang-?nhap|\/auth\b|\/sso\b|\/oauth/.test(u)) return true;
+  if (pw.some((p) => p.closest('[role=dialog], [aria-modal=true], [class*=modal], [class*=popup], [class*=login], [id*=login]'))) return true;
+  const btns = Array.from(document.querySelectorAll('button, input[type=submit], [role=button]')).filter(vis).map((b) => fold(b.value || b.innerText));
+  return pw.length === 1 && btns.some((t) => /^(dang nhap|login|log in|sign in)$/.test(t)) && !btns.some((t) => /^(dang ky|register|sign up|tao tai khoan)/.test(t));
+}
+
 /* ================= Phía máy chủ ================= */
 async function settle(page, max = 8000) {
   const t0 = Date.now();
@@ -427,6 +443,37 @@ async function waitChange(page, before, ms, texts) {
   return '';
 }
 
+/* Phiên đăng nhập do người chấm cung cấp (cookie xuất từ trình duyệt của họ).
+   Chỉ nhận cookie thuộc đúng tên miền của trang đang chấm; chỉ dùng trong lần chạy này, không lưu, không ghi log. */
+const SLD2 = /^(com|net|org|edu|gov|ac|co|info|biz|name|pro|health|int)$/;
+function baseDomain(host) {
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || !host.includes('.')) return host;
+  const p = host.split('.');
+  return p.length > 2 && SLD2.test(p[p.length - 2]) && p[p.length - 1].length === 2 ? p.slice(-3).join('.') : p.slice(-2).join('.');
+}
+function readCookies(raw, url) {
+  if (!raw) return [];
+  const base = baseDomain(url.hostname);
+  const okDomain = (d) => { d = String(d || '').replace(/^\./, '').toLowerCase(); return d === base || d.endsWith('.' + base); };
+  let list = [];
+  const txt = typeof raw === 'string' ? raw.trim() : '';
+  if (Array.isArray(raw)) list = raw;
+  else if (txt.startsWith('[') || txt.startsWith('{')) { try { const j = JSON.parse(txt); list = Array.isArray(j) ? j : (j.cookies || []); } catch (e) { throw new UserError('Phiên đăng nhập không đúng định dạng JSON. Hãy xuất lại bằng tiện ích Cookie-Editor (Export → JSON).'); } }
+  else if (txt) list = txt.replace(/^cookie:\s*/i, '').split(/;\s*/).filter((x) => x.includes('=')).map((x) => ({ name: x.slice(0, x.indexOf('=')).trim(), value: x.slice(x.indexOf('=') + 1).trim(), domain: url.hostname }));
+  if (list.length > 150 || JSON.stringify(list).length > 64 * 1024) throw new UserError('Phiên đăng nhập quá lớn. Chỉ xuất cookie của trang đang chấm.');
+  const SS = { no_restriction: 'None', none: 'None', lax: 'Lax', strict: 'Strict' };
+  const out = list.filter((c) => c && c.name && typeof c.value === 'string' && okDomain(c.domain || url.hostname)).map((c) => {
+    const o = { name: String(c.name).slice(0, 256), value: String(c.value).slice(0, 8192), domain: c.domain || url.hostname, path: c.path || '/', secure: !!c.secure, httpOnly: !!c.httpOnly };
+    if (c.hostOnly) o.domain = String(c.domain || url.hostname).replace(/^\./, '');
+    const ss = SS[String(c.sameSite || '').toLowerCase()]; if (ss) o.sameSite = ss;
+    if (o.sameSite === 'None') o.secure = true;
+    const exp = c.expirationDate || c.expires; if (exp && exp > 0) o.expires = Math.floor(exp);
+    return o;
+  });
+  if (list.length && !out.length) throw new UserError(`Phiên đăng nhập không có cookie nào của ${base}. Hãy đăng nhập và xuất cookie ngay trên trang form đang chấm.`);
+  return out;
+}
+
 /* Chế độ gửi thật: cần email + số điện thoại của người chấm (để OTP, email xác nhận về đúng người) */
 function readOptions(req, body) {
   const q = req.method === 'GET' ? new URL(req.url, 'http://x').searchParams : null;
@@ -452,6 +499,7 @@ export default async function handler(req, res) {
     checkCaller(req, url);
     const opts = readOptions(req, body);
     const SUBMIT = opts.submit, P = opts.profile;
+    const cookies = readCookies((body && body.cookies) || (req.method === 'GET' ? new URL(req.url, 'http://x').searchParams.get('cookies') : ''), url);
     if (SUBMIT) budget = BUDGET_SUBMIT_MS;
     ensureSampleFiles();
     const local = process.env.CHROME_PATH;
@@ -475,6 +523,7 @@ export default async function handler(req, res) {
         return r.continue();
       } catch (e) { try { r.abort(); } catch (x) { /* bỏ qua */ } }
     });
+    if (cookies.length) await page.setCookie(...cookies);
     const dialogs = [];
     /* Hộp thoại: khi gửi thật thì đồng ý "Bạn có chắc muốn gửi?", còn lại thì đóng */
     page.on('dialog', (d) => { dialogs.push(d.message().slice(0, 200)); (SUBMIT && !net.block && d.type() === 'confirm' ? d.accept() : d.dismiss()).catch(() => {}); });
@@ -547,6 +596,7 @@ export default async function handler(req, res) {
       if (cnt && !cap.fresh && steps.some((x) => x.kind === 'form')) { stop = { kind: 'nochange', text: lastBtn }; break; }
       steps.push(cap);
       if (!cnt) { stop = { kind: steps.some((x) => x.kind === 'form') ? 'end' : 'nofields' }; break; }
+      if (await page.evaluate(loginWall).catch(() => false)) { cap.kind = 'login'; stop = { kind: 'login', text: lastBtn, session: cookies.length > 0, page: true }; break; }
       if (left() < 12000) { stop = { kind: 'time' }; break; }
       if (SUBMIT && (await page.evaluate(guardCheck)).otp) { stop = { kind: 'otp' }; break; }
       let btn = await page.evaluate(findButtons);
@@ -621,7 +671,9 @@ export default async function handler(req, res) {
       if (!ch) {
         const er = await page.evaluate(readErrors, prevTexts).catch(() => null);
         const msgs = er ? [...er.errors.filter((e) => e.isNew || target === 'next').map((e) => e.text), ...er.native.map((x) => x.msg)].filter(Boolean) : [];
-        if (!SUBMIT && net.writes.length > nw) stop = { kind: 'post', text: lastBtn };
+        const login = msgs.find((m) => /đăng nhập|dang nhap|log ?in|sign ?in/i.test(m));
+        if (login) stop = { kind: 'login', text: lastBtn, errors: [login], session: cookies.length > 0 };
+        else if (!SUBMIT && net.writes.length > nw) stop = { kind: 'post', text: lastBtn };
         else if (msgs.length) stop = { kind: SUBMIT && target === 'submit' && net.sent > ns ? 'server' : 'invalid', text: lastBtn, errors: [...new Set(msgs)].slice(0, 5) };
         else stop = { kind: SUBMIT && target === 'submit' && net.sent > ns ? 'noreply' : 'nochange', text: lastBtn };
         break;
@@ -647,7 +699,7 @@ export default async function handler(req, res) {
     const first = steps.find((x) => x.kind === 'form') || steps[0];
     send(res, 200, {
       ok: true, mode: 'render', finalUrl: first.url, status, note: notes.join(' '), truncated,
-      steps, probe, stop, submit: SUBMIT, submitted, net: { requests: net.reqs, blocked: net.blocked, writes: net.writes.length },
+      steps, probe, stop, submit: SUBMIT, submitted, session: cookies.length, net: { requests: net.reqs, blocked: net.blocked, writes: net.writes.length },
       ms: Date.now() - t0,
     });
   } catch (e) {

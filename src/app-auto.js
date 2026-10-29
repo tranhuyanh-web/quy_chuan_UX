@@ -43,6 +43,21 @@ function viewAuto(main) {
               <p class="az-profile-h">${ic('info', 16)}<span>Thông tin dùng để đăng ký thử, chỉ lưu trên máy của bạn. Mỗi lần chấm tạo một hồ sơ; nếu form không cho đăng ký trùng email, lần sau dùng dạng <b>ten+2@gmail.com</b>. Nhớ xóa hồ sơ thử trong trang quản trị.</span></p>
               ${fieldHTML(AZ_PCFG.name)}${fieldHTML(AZ_PCFG.email)}${fieldHTML(AZ_PCFG.phone)}${fieldHTML(AZ_PCFG.ok)}
             </div>
+            <details class="az-sess" id="az-sess" ${AZ_UI.cookies ? 'open' : ''}>
+              <summary>${ic('lock', 16)}<span>Đăng nhập trước khi chấm <span class="muted">— khi form cần tài khoản, ví dụ MyVnE</span></span>${ic('down', 16, 'chev')}</summary>
+              <div class="az-sess-b">
+                <p>Công cụ không dùng mật khẩu, kể cả tài khoản Google. Bạn đăng nhập trên Chrome của mình (đăng nhập MyVnE bằng Google như bình thường), rồi đưa <b>phiên đăng nhập</b> của trang đó cho công cụ:</p>
+                <ol class="az-sess-steps">
+                  <li>Mở trang form trên Chrome và đăng nhập.</li>
+                  <li>Cách dễ: cài tiện ích <a href="https://cookie-editor.com/" target="_blank" rel="noopener">Cookie-Editor</a>, mở tiện ích ngay trên trang form, bấm <b>Export → JSON</b>.<br>Không cài gì: nhấn F12 → tab <b>Network</b> → tải lại trang → bấm dòng đầu tiên → mục Request Headers → sao chép giá trị dòng <b>cookie</b>.</li>
+                  <li>Dán vào ô dưới đây. Có thể dùng cùng chế độ "Gửi thật" để đi tới trang xác nhận.</li>
+                </ol>
+                <div class="f-field" id="fw-az-cookies"><label class="f-label" for="az-cookies">Phiên đăng nhập (cookie) <span class="f-opt">(không bắt buộc)</span></label>
+                  <p class="f-hint" id="az-cookies-hint">Chỉ cookie của đúng tên miền trang form được dùng, cho đúng lần chấm này: không lưu trên máy chủ, không lưu lại trên trình duyệt.</p>${errP('az-cookies')}
+                  <textarea class="f-input f-textarea az-paste az-cookies" id="az-cookies" spellcheck="false" autocomplete="off" aria-describedby="az-cookies-hint az-cookies-warn" rows="4"></textarea></div>
+                <p class="az-sess-warn" id="az-cookies-warn">${ic('alert', 16)}<span>Phiên đăng nhập cho phép thao tác như chính bạn. Nên dùng tài khoản thử. Chấm xong, bấm Đăng xuất trên Chrome để phiên này hết hiệu lực.</span></p>
+              </div>
+            </details>
           </div>
         </div>
         <div data-azpane="file" ${AZ_UI.src === 'file' ? '' : 'hidden'}>
@@ -69,6 +84,8 @@ function viewAuto(main) {
   AZ_UI.p = { name: mountField(AZ_PCFG.name, main), email: mountField(AZ_PCFG.email, main), phone: mountField(AZ_PCFG.phone, main), ok: mountField(AZ_PCFG.ok, main) };
   AZ_UI.p.name.set(AZ_SUB.name || 'Nguyễn Văn Kiểm Thử'); if (AZ_SUB.email) AZ_UI.p.email.set(AZ_SUB.email); if (AZ_SUB.phone) AZ_UI.p.phone.set(AZ_SUB.phone);
   if (AZ_SUB.ok) { const cb = $('#azp-ok', main); if (cb) cb.checked = true; }
+  const ckEl = $('#az-cookies', main);
+  if (ckEl) { if (AZ_UI.cookies) ckEl.value = AZ_UI.cookies; ckEl.addEventListener('input', () => { AZ_UI.cookies = ckEl.value; }); }
   $$('input[name="az-sub"]', main).forEach((r) => r.addEventListener('change', () => { AZ_SUB.on = r.value === '1'; $('#az-profile', main).hidden = !AZ_SUB.on; store.set('fx-az-sub', AZ_SUB); }));
   $$('[data-azsrc]', main).forEach((b) => b.addEventListener('click', () => {
     AZ_UI.src = b.dataset.azsrc;
@@ -131,6 +148,13 @@ async function azRun(urlCtl) {
         AZ_SUB = { on: true, name: AZ_UI.p.name.get() || 'Nguyễn Văn Kiểm Thử', email: AZ_UI.p.email.get(), phone: AZ_UI.p.phone.get(), ok: true };
         store.set('fx-az-sub', AZ_SUB);
         extra = { submit: true, profile: { name: AZ_SUB.name, email: AZ_SUB.email, phone: AZ_SUB.phone } };
+      }
+      const ck = AZ_UI.mode === 'render' ? (($('#az-cookies') || {}).value || '').trim() : '';
+      if (ck) {
+        const cctl = { id: 'az-cookies', el: $('#fw-az-cookies'), inputs: () => [$('#az-cookies')] };
+        if (!/=|"name"\s*:/.test(ck)) { setErr(cctl, 'Phiên đăng nhập chưa đúng: dán JSON xuất từ Cookie-Editor, hoặc chuỗi cookie dạng ten=giatri; ten2=giatri2'); $('#az-cookies').focus(); return; }
+        clearErr(cctl);
+        extra = { ...(extra || {}), cookies: ck };
       }
       azBusy(true);
       await azRunUrl(url, AZ_UI.mode, extra);
@@ -202,7 +226,7 @@ async function azRunUrl(url, mode, extra) {
     const probeAt = data.steps.findIndex((x) => x.kind === 'form');
     const pages = data.steps.map((x, i) => azAnalyzePage(x.html, { metrics: x.metrics, url: x.url, status: i === 0 ? data.status : 0, multi: forms > 1, probe: i === probeAt ? data.probe : null, done: x.kind === 'done', success: x.success, profile: sub ? extra.profile : null }));
     azFinish(pages, {
-      kind: 'url', url: data.finalUrl, mode: 'render', ms: data.ms, truncated: data.truncated, note: notes, stop: data.stop, submit: sub, submitted: !!data.submitted, email: sub ? extra.profile.email : '',
+      kind: 'url', url: data.finalUrl, mode: 'render', ms: data.ms, truncated: data.truncated, note: notes, stop: data.stop, submit: sub, submitted: !!data.submitted, email: sub ? extra.profile.email : '', session: data.session || 0,
       probe: data.probe ? { clicked: data.probe.clicked, n: (data.probe.errors || []).length, advanced: !!data.probe.advanced, summary: !!data.probe.summary, native: (data.probe.native || []).length, dialogs: (data.probe.dialogs || []).length } : null,
       steps: data.steps.map((x) => ({ kind: x.kind, url: x.url, heading: x.heading, title: x.title, shot: x.shot, shotW: x.shotW, shotH: x.shotH })),
     });
@@ -272,6 +296,10 @@ function azFinish(pages, meta) {
     R.V8 = !errs.length ? { st: 'fail', msg: `Bấm "${meta.stop.text}" xong không có phản hồi trong 14 giây: không chuyển trang, không báo lỗi.`, ev: [] }
       : { st: gen ? 'fail' : 'pass', msg: gen ? 'Máy chủ từ chối hồ sơ thử bằng câu lỗi chung chung, không nói cách xử lý.' : 'Máy chủ từ chối hồ sơ thử và nói rõ lý do.', ev: errs.map((e) => `"${azCut(e, 90)}"`) };
   }
+  if (meta.stop && meta.stop.kind === 'login' && !meta.stop.session) {
+    const filled = steps.some((x) => x.kind === 'form' && x.fields.length);
+    R.F7 = { st: 'warn', msg: filled ? 'Form chỉ báo cần đăng nhập sau khi người dùng đã điền xong bước đầu: dễ mất dữ liệu, gây bực.' : 'Phải đăng nhập trước khi xem được form.', ev: (meta.stop.errors || []).map((e) => `"${azCut(e, 100)}"`) };
+  }
   const rep = { v: 3, R, fields, steps, locs, info, meta: { ...meta, steps: undefined, ts: Date.now() } };
   AZ_LAST = rep;
   azSave(rep);
@@ -308,9 +336,12 @@ const AZ_STOP = {
   otp: () => ({ ok: false, t: 'Dừng ở bước nhập mã OTP', d: 'Mã đã được gửi tới số điện thoại hoặc email bạn nhập. Công cụ không đọc được tin nhắn nên dừng ở đây; hãy thử tay bước này.' }),
   server: (x) => ({ ok: false, t: `Bấm "${x.text}": máy chủ từ chối hồ sơ thử`, d: x.errors && x.errors.length ? `Trang báo: ${x.errors.map((e) => `"${azCut(e, 80)}"`).join(', ')}.` : '' }),
   noreply: (x) => ({ ok: false, t: `Bấm "${x.text}" nhưng không có phản hồi trong 14 giây`, d: 'Không chuyển trang, không báo lỗi, không báo thành công (xem V8).' }),
+  login: (x) => (x.session
+    ? { ok: false, sess: true, t: 'Phiên đăng nhập không dùng được', d: 'Form vẫn đòi đăng nhập dù đã dùng phiên bạn cung cấp: phiên có thể đã hết hạn hoặc thiếu cookie. Đăng nhập lại trên Chrome, xuất cookie mới ngay trên trang form rồi chấm lại.' }
+    : { ok: false, sess: true, t: `Form yêu cầu đăng nhập${x.text ? ` khi bấm "${x.text}"` : ''}`, d: `${x.errors && x.errors[0] ? `Form báo: "${azCut(x.errors[0], 100)}". ` : x.page ? 'Trang chuyển sang màn hình đăng nhập. ' : ''}Thêm phiên đăng nhập ở mục "Đăng nhập trước khi chấm" rồi chấm lại; muốn đi tới trang xác nhận thì chọn thêm "Gửi thật như người đăng ký".` }),
 };
 const azWorst = (f) => (f.probs && f.probs.length ? f.probs[0].st : 'pass');
-function azStepLabels(steps) { let k = 0; return steps.map((x) => (x.kind === 'landing' ? 'Trang giới thiệu' : x.kind === 'done' ? 'Trang xác nhận' : x.kind === 'page' ? 'Trang tiếp theo' : `Bước ${++k}`)); }
+function azStepLabels(steps) { let k = 0; return steps.map((x) => (x.kind === 'landing' ? 'Trang giới thiệu' : x.kind === 'done' ? 'Trang xác nhận' : x.kind === 'login' ? 'Trang đăng nhập' : x.kind === 'page' ? 'Trang tiếp theo' : `Bước ${++k}`)); }
 function azFlowHTML(rep) {
   const { meta, steps } = rep;
   const labels = azStepLabels(steps);
@@ -319,8 +350,9 @@ function azFlowHTML(rep) {
   const prLine = pr ? (pr.advanced ? `Đã thử bấm "${pr.clicked}" khi để trống: form vẫn chuyển bước.` : `Đã thử bấm "${pr.clicked}" khi để trống: ${pr.dialogs ? 'form báo lỗi bằng hộp thoại của trình duyệt' : pr.n ? `form hiện ${pr.n} câu lỗi${pr.summary ? ', có tóm tắt lỗi' : ', không có tóm tắt lỗi'}` : pr.native ? 'chỉ có bong bóng báo lỗi của trình duyệt' : 'không thấy báo lỗi'}.`) : '';
   if (!rep.info.N || (steps.length < 2 && !st && !prLine)) return '';
   return `<div class="az-flow ${st && !st.ok ? 'part' : 'ok'}">
-    ${st ? `<p class="az-flow-h">${ic(st.ok ? 'ok' : 'alert', 18)}<span><b>${esc(st.t)}</b>${st.d ? ` ${esc(st.d)}` : ''}</span></p>${st.act ? `<div class="btn-row"><button type="button" class="btn btn-sec btn-sm" data-azresub>${ic('spark', 15)}Chấm lại ở chế độ gửi thật</button></div>` : ''}` : ''}
+    ${st ? `<p class="az-flow-h">${ic(st.ok ? 'ok' : 'alert', 18)}<span><b>${esc(st.t)}</b>${st.d ? ` ${esc(st.d)}` : ''}</span></p>${st.act || st.sess ? `<div class="btn-row">${st.sess ? `<button type="button" class="btn btn-pri btn-sm" data-azsess>${ic('lock', 15)}Thêm phiên đăng nhập</button>` : ''}${st.act ? `<button type="button" class="btn btn-sec btn-sm" data-azresub>${ic('spark', 15)}Chấm lại ở chế độ gửi thật</button>` : ''}</div>` : ''}` : ''}
     <ol class="az-flow-steps">${steps.map((x, i) => { const bad = x.fields.filter((f) => ['fail', 'warn'].includes(azWorst(f))).length; return `<li><button type="button" data-azstep="${x.n}"><b>${labels[i]}</b><span>${x.kind === 'landing' && !x.fields.length ? 'không có ô nhập' : `${x.fields.length} trường${bad ? ` · ${bad} cần sửa` : ''}`}</span></button></li>`; }).join('')}${st && !st.ok ? `<li class="az-flow-stop">${ic('x', 14)}Chưa đọc được</li>` : ''}</ol>
+    ${meta.session ? `<p class="az-flow-d">${ic('lock', 14)}<span>Chấm khi đã đăng nhập bằng phiên bạn cung cấp (${meta.session} cookie). Công cụ không lưu phiên này.</span></p>` : ''}
     ${prLine ? `<p class="az-flow-d">${ic('target', 14)}<span>${esc(prLine)} ${meta.submit ? `Lần bấm thử này không gửi gì; sau đó công cụ điền thông tin của bạn (${esc(meta.email || '')}) và gửi thật.` : 'Từ lúc này công cụ chặn mọi yêu cầu gửi dữ liệu, dùng email @example.com.'}</span></p>` : ''}
   </div>`;
 }
@@ -369,6 +401,11 @@ function azDrawReport(rep) {
     <p class="muted az-limit">${ic('info', 15)}<span>Máy chỉ thấy những gì hiển thị và có trong mã trang. Công cụ điền dữ liệu thử để sang bước sau nhưng không bấm gửi và chặn mọi yêu cầu gửi dữ liệu, nên không tạo hồ sơ thật. Hành vi khi tải tệp, lỗi từ máy chủ, trang xác nhận, email phải thử tay — xem <a href="#kiem-thu">Kịch bản kiểm thử</a>.</span></p>
   </section>`;
   if (!info.N) return;
+  const sb = $('[data-azsess]', box);
+  if (sb) sb.addEventListener('click', () => {
+    const mr = $('#az-mode-r'); if (mr && !mr.checked) { mr.checked = true; mr.dispatchEvent(new Event('change')); }
+    const d = $('#az-sess'); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => { const t = $('#az-cookies'); if (t) t.focus({ preventScroll: true }); }, 350); }
+  });
   const rs = $('[data-azresub]', box);
   if (rs) rs.addEventListener('click', () => {
     const r1 = $('#az-sub-1'); if (r1) { r1.checked = true; r1.dispatchEvent(new Event('change')); }

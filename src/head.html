@@ -898,6 +898,18 @@ details.more summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--a
 .az-g-more[open]>.az-guide,.az-g-more[open]>.az-g-ol{margin-top:6px}
 .az-item .az-guide{margin-top:8px}
 @media (max-width: 760px){.az-g-grid{grid-template-columns:minmax(0,1fr)}}
+.az-sess{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:14px}
+.az-sess>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:48px;padding:6px 14px;font-weight:600;font-size:14.5px}
+.az-sess>summary::-webkit-details-marker{display:none}
+.az-sess>summary>span{flex:1}
+.az-sess>summary .muted{font-weight:400}
+.az-sess>summary .chev{transition:transform .15s}
+.az-sess[open]>summary .chev{transform:rotate(180deg)}
+.az-sess-b{padding:0 14px 14px;display:grid;gap:10px;font-size:14px;color:var(--ink-2)}
+.az-sess-steps{margin:0;padding-left:22px;display:grid;gap:6px}
+.az-cookies{min-height:96px;font:12.5px/1.5 var(--f-mono)}
+.az-sess-warn{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;background:var(--warn-soft);color:var(--ink);border-radius:8px;padding:8px 10px}
+.az-sess-warn .ic{flex:none;margin-top:2px;color:var(--warn)}
 /* ---------- Minh họa tĩnh ---------- */
 .mk{font-size:13px;line-height:1.45;color:var(--ink)}
 .mk-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px}
