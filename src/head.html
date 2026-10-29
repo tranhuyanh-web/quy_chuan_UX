@@ -826,7 +826,7 @@ details.more summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--a
 .az-fc-badge{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
 .az-fc-badge.st-fail{background:var(--err-soft);color:var(--err)} .az-fc-badge.st-warn{background:var(--warn-soft);color:var(--warn)} .az-fc-badge.st-pass{background:var(--ok-soft);color:var(--ok)}
 .az-probs{list-style:none;margin:0;padding:0;display:grid;gap:10px}
-.az-probs li{display:grid;gap:5px;padding-top:10px;border-top:1px solid var(--line)}
+.az-probs>li{display:grid;gap:5px;padding-top:10px;border-top:1px solid var(--line)}
 .az-pt{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:14px}
 .az-pt .az-st{height:22px;font-size:12px;padding:0 8px}
 .az-probs .st-fail .az-st,.az-gc.st-fail .az-st{background:var(--err-soft);color:var(--err)}
@@ -865,6 +865,39 @@ details.more summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--a
   .az-fc-h{grid-template-columns:auto minmax(0,1fr)}
   .az-fc-badge{grid-column:2;justify-self:start}
 }
+/* ---------- Chấm tự động: chế độ gửi thật, ảnh cắt, hướng dẫn ---------- */
+.az-profile{display:grid;gap:4px;border:1px dashed var(--line-strong);border-radius:12px;padding:14px 14px 4px;margin-bottom:14px;background:var(--surface-2)}
+.az-profile-h{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--ink-2);margin-bottom:8px}
+.az-profile-h .ic{flex:none;margin-top:2px;color:var(--accent)}
+.az-guide{display:grid;gap:14px;margin-top:4px;padding:14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+.az-g-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.az-g-grid.one{grid-template-columns:minmax(0,1fr)}
+.az-g-col{display:grid;gap:8px;align-content:start;min-width:0}
+.az-g-h{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.az-g-h.ok{color:var(--ok)}
+.az-g-none{font-size:13.5px}
+.az-crop-f{margin:0;display:grid;gap:5px}
+.az-crop{position:relative;overflow:hidden;border-radius:10px;border:1px solid var(--line);background:#fff;width:100%}
+.az-crop img{position:absolute;max-width:none;height:auto;display:block}
+.az-crop-hl{position:absolute;border:2.5px solid #C22929;border-radius:5px;box-shadow:0 0 0 3px rgb(255 225 92 / .6);pointer-events:none}
+.az-crop-hl.st-warn{border-color:#B57A00}
+.az-crop-f figcaption{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.az-g-mock{border:1px solid var(--line);border-radius:10px}
+.az-g-do{margin:0;padding-left:18px;font-size:13.5px;display:grid;gap:4px;color:var(--ink-2)}
+.az-g-how{display:grid;gap:8px}
+.az-g-ol{margin:0;padding-left:22px;display:grid;gap:6px;font-size:14px;line-height:1.55;color:var(--ink)}
+.az-g-ol li::marker{font-weight:700;color:var(--accent)}
+.az-g-chk{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--ink-2)}
+.az-g-chk .ic{flex:none;margin-top:3px;color:var(--ok)}
+.az-g-test{display:grid;gap:6px;font-size:14px;color:var(--ink-2)}
+.az-g-exp{background:var(--surface);border-radius:8px;padding:8px 10px}
+.az-g-more>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;min-height:36px;font-size:13.5px;font-weight:600;color:var(--accent)}
+.az-g-more>summary::-webkit-details-marker{display:none}
+.az-g-more>summary .chev{transition:transform .15s}
+.az-g-more[open]>summary .chev{transform:rotate(180deg)}
+.az-g-more[open]>.az-guide,.az-g-more[open]>.az-g-ol{margin-top:6px}
+.az-item .az-guide{margin-top:8px}
+@media (max-width: 760px){.az-g-grid{grid-template-columns:minmax(0,1fr)}}
 /* ---------- Minh họa tĩnh ---------- */
 .mk{font-size:13px;line-height:1.45;color:var(--ink)}
 .mk-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:8px}

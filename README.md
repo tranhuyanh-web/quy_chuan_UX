@@ -59,8 +59,11 @@ Mở http://127.0.0.1:3000. `FX_ALLOW_PRIVATE=1` cho phép chấm các trang ch�
   4. Điền dữ liệu thử (email `@example.com`, số điện thoại mẫu…), bấm **Tiếp** để sang bước sau; lặp tối đa 6 bước, khoảng 50 giây. **Không bao giờ bấm nút gửi cuối cùng.**
   5. Từ lúc bấm thử đầu tiên, **chặn mọi yêu cầu gửi dữ liệu** (POST, PUT, PATCH, DELETE) nên không tạo hồ sơ, không gửi OTP. Bước sau cần gửi dữ liệu lên máy chủ thì công cụ dừng và nói rõ.
   6. Mỗi bước: đo ở khung điện thoại 390px (cỡ chữ, vùng chạm, tương phản, phím Tab) và khung 1280px (bố cục cột), chụp toàn trang để đánh số từng ô.
+- **Chế độ gửi thật** (người dùng tự chọn, kèm xác nhận có quyền kiểm thử): sau lần bấm thử khi để trống (lần này vẫn chặn gửi), công cụ điền họ tên, email, số điện thoại do người chấm nhập và gửi như người đăng ký thật, đi hết các bước tới trang xác nhận, rồi chấm trang xác nhận (K1 mã hồ sơ và bước tiếp theo, K2 thông báo đã gửi email, K3 tra cứu hồ sơ, P3 che dữ liệu nhạy cảm) và câu lỗi máy chủ (V8). Dừng trước bước thanh toán (nút "Thanh toán", ô thẻ, cổng VNPay/MoMo/ZaloPay…), ô OTP và CAPTCHA giải đố; tự đồng ý hộp thoại "Bạn có chắc muốn gửi?". Giới hạn khoảng 105 giây, tối đa 9 bước. Mỗi lần chạy tạo một hồ sơ thử thật.
+- `/api/vi-du-nhan-ho-so`: máy chủ giả cho form mẫu, trả mã hồ sơ, không lưu gì.
 - **Đường dẫn, chế độ Nhanh:** `api/fetch` chỉ tải mã HTML, không chạy JavaScript của trang.
 - **Tệp HTML / dán mã:** phân tích ngay trên trình duyệt, không gửi đi đâu. Hỗ trợ nhiều tệp (mỗi tệp một bước) và tệp `.mhtml`. Bản xem trước đặt trong khung sandbox không chạy script.
+- **Ảnh minh họa và hướng dẫn:** mỗi tiêu chí chưa đạt có ảnh cắt từ chính trang được chấm (khoanh đỏ chỗ lỗi), minh họa "Nên làm thế này" của bộ chuẩn và các bước sửa; tiêu chí cần thử tay có kịch bản thử và kết quả đúng.
 - **Báo cáo theo trường:** ảnh từng bước có ghim số trên từng ô; mỗi ô có thẻ "Vấn đề / Cách sửa" theo từng nguyên tắc và mã gợi ý (hiện tại → nên sửa). Vấn đề không gắn với ô nào nằm ở mục "Vấn đề chung của form". Cách xem "Theo tiêu chí" vẫn giữ danh sách 79 nguyên tắc.
 - Trang mẫu để thử: `/samples/landing` (trang giới thiệu → form 3 bước), `/samples/multi-step`, `/samples/embed` (form trong iframe), `/samples/bad-form`.
 - Biến môi trường tùy chọn `FX_TEST_TOKEN`: cho phép gọi `GET /api/render?url=…&token=…` để kiểm thử từ ngoài trình duyệt.

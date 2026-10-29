@@ -10,8 +10,11 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import { checkUrl, checkCaller, readBody, targetFrom, send, hostIsPublic, UserError, UA_DESKTOP } from '../lib/guard.js';
 
-const MAX_STEPS = 6;
-const BUDGET_MS = 49000;
+const MAX_STEPS = 6, MAX_STEPS_SUBMIT = 9;
+const BUDGET_MS = 49000, BUDGET_SUBMIT_MS = 105000;
+const PAY_RE = /thanh toan|\bpay\b|payment|checkout|mua ve|dat mua|dat ve|nap tien/;
+const GATEWAY_RE = /vnpay|vnpayment|momo\.vn|zalopay|onepay|payoo|napas|stripe\.com|paypal\.com|checkout\.|payment\./i;
+const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 const STEP_HTML = 1200 * 1024;
 const TOTAL_BYTES = 3600 * 1024;
 const MOBILE = { width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true };
@@ -32,8 +35,10 @@ function ensureSampleFiles() {
 const SEL = 'input, select, textarea, button, [role=combobox], [role=radio], [role=checkbox], [role=textbox], [role=listbox], [role=switch], [contenteditable=""], [contenteditable="true"]';
 
 function countControls() {
-  const q = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]):not([type=reset]), select, textarea, [role=combobox], [role=radio], [role=checkbox], [role=textbox]';
+  const q = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]):not([type=reset]):not([type=search]), select, textarea, [role=combobox], [role=radio], [role=checkbox], [role=textbox]';
+  const srch = (el) => el.closest('[role=search], form[role=search], form[action*="search"], form[action*="tim-kiem"]') || (/^(q|s|query|keywords?|search|tu_?khoa)$/i.test(el.name || '') && /tìm|search/i.test(el.getAttribute('placeholder') || ''));
   return Array.from(document.querySelectorAll(q)).filter((el) => {
+    if (srch(el)) return false;
     const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none') return false;
     if (r.width > 1 && r.height > 1) return true;
@@ -48,7 +53,9 @@ function markOld(seen) {
   const q = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]):not([type=reset]), select, textarea, [role=combobox], [role=radio], [role=checkbox], [role=textbox]';
   const lab = (el) => ((el.labels && el.labels[0] && el.labels[0].innerText) || el.getAttribute('aria-label') || '').trim().slice(0, 40);
   const out = []; let fresh = 0;
+  const srch = (el) => el.type === 'search' || el.closest('[role=search], form[role=search], form[action*="search"], form[action*="tim-kiem"]') || (/^(q|s|query|keywords?|search|tu_?khoa)$/i.test(el.name || '') && /tìm|search/i.test(el.getAttribute('placeholder') || ''));
   document.querySelectorAll(q).forEach((el, i) => {
+    if (srch(el)) { el.setAttribute('data-fx-search', '1'); return; }
     const r = el.getBoundingClientRect();
     const visible = r.width > 1 && r.height > 1 && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
     const shown = visible || (/^(radio|checkbox)$/.test(el.type || '') && el.labels && el.labels[0] && el.labels[0].getBoundingClientRect().width > 1);
@@ -254,7 +261,7 @@ function readErrors(before) {
 }
 
 /* Điền dữ liệu thử vào các ô đang hiển thị và còn trống. Trả về danh sách ô tải tệp cần chọn tệp. */
-function fillVisible() {
+function fillVisible(P) {
   const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
   const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 1 && r.height > 1 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
   const labOf = (el) => [(el.labels && el.labels[0] && el.labels[0].innerText) || '', el.getAttribute('aria-label') || '', el.getAttribute('placeholder') || '', el.name || '', el.id || '', el.getAttribute('autocomplete') || ''].join(' ');
@@ -273,11 +280,12 @@ function fillVisible() {
   Array.from(document.querySelectorAll('input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=image]):not([type=reset]), select, textarea')).forEach((el) => {
     const t = (el.type || el.tagName).toLowerCase();
     const shown = vis(el) || (/^(radio|checkbox)$/.test(t) && el.labels && el.labels[0] && vis(el.labels[0]));
-    if (!shown || el.disabled || el.readOnly || el.getAttribute('data-fx-old') === '1') return;
+    if (!shown || el.disabled || el.readOnly || el.getAttribute('data-fx-old') === '1' || el.getAttribute('data-fx-search') === '1') return;
     const L = fold(labOf(el));
     if (t === 'file') { files.push({ i: el.getAttribute('data-fx-i'), img: /image|jpe?g|png|anh|photo/.test(fold((el.accept || '') + ' ' + L)) }); return; }
     if (t === 'checkbox') {
-      if (!el.checked && (el.required || el.getAttribute('aria-required') === 'true' || /dong y|dieu khoan|the le|cam ket|chinh sach|agree|terms|xac nhan/.test(L)) && !/quang cao|khuyen mai|nhan tin|ban tin|newsletter|marketing/.test(L)) { el.click(); done.push(el.name); }
+      const req = el.required || el.getAttribute('aria-required') === 'true';
+      if (!el.checked && (req || (/dong y|dieu khoan|the le|cam ket|chinh sach|agree|terms|xac nhan/.test(L) && !/quang cao|khuyen mai|nhan tin|ban tin|newsletter|marketing/.test(L)))) { el.click(); done.push(el.name); }
       return;
     }
     if (t === 'radio') {
@@ -296,9 +304,9 @@ function fillVisible() {
     if (el.value) return;
     let v = 'Kiểm thử';
     const ac = (el.getAttribute('autocomplete') || '').toLowerCase();
-    if (t === 'email' || /e-?mail/.test(L)) v = 'kiemthu.tudong@example.com';
+    if (t === 'email' || /e-?mail/.test(L)) v = P.email;
     else if (t === 'password') v = pw;
-    else if (t === 'tel' || /dien thoai|\bsdt\b|so dt|phone|mobile|di dong|zalo/.test(L)) v = '0912345678';
+    else if (t === 'tel' || /dien thoai|\bsdt\b|so dt|phone|mobile|di dong|zalo/.test(L)) v = P.phone;
     else if (t === 'date') v = '2004-05-20';
     else if (t === 'month') v = '2004-05';
     else if (t === 'time') v = '09:00';
@@ -310,9 +318,9 @@ function fillVisible() {
     else if (/bday-month|thang|month|\bmm\b/.test(L + ' ' + ac)) v = '05';
     else if (/bday-year|nam sinh|\bnam\b|year|yyyy/.test(L + ' ' + ac)) v = '2004';
     else if (/ngay sinh|birth|dob|bday/.test(L)) v = '20/05/2004';
-    else if (/ho (va )?ten|ho ten|full ?name|\bname\b|ten thi sinh|ten ban/.test(L)) v = 'Nguyễn Văn An';
-    else if (/^\s*ho\b|last ?name|family/.test(L)) v = 'Nguyễn';
-    else if (/^\s*ten\b|first ?name|given/.test(L)) v = 'Văn An';
+    else if (/ho (va )?ten|ho ten|full ?name|\bname\b|ten thi sinh|ten ban/.test(L)) v = P.name;
+    else if (/^\s*ho\b|last ?name|family/.test(L)) v = P.name.split(/\s+/)[0];
+    else if (/^\s*ten\b|first ?name|given/.test(L)) v = P.name.split(/\s+/).slice(1).join(' ') || P.name;
     else if (/dia chi|so nha|duong|address|street/.test(L)) v = '12 Phố Huế';
     else if (/truong|school|don vi|cong ty|organization/.test(L)) v = 'Trường THPT Kiểm Thử';
     else if (/tinh|thanh pho|province|city/.test(L)) v = 'Hà Nội';
@@ -327,6 +335,31 @@ function fillVisible() {
   document.querySelectorAll('[role=checkbox][aria-required=true][aria-checked=false]').forEach((c) => { if (vis(c)) { c.click(); done.push('checkbox'); } });
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   return { files, count: done.length };
+}
+
+/* Câu báo đăng ký thành công xuất hiện sau khi gửi */
+function successText(before) {
+  const old = new Set(before || []);
+  const RE = /(đăng ký|gửi|nộp|ghi danh|đề cử|bình chọn|đặt chỗ)[^.!\n]{0,30}(thành công|hoàn tất)|cảm ơn (bạn|anh|chị|quý)|đã (nhận|ghi nhận|tiếp nhận) (được )?(hồ sơ|đăng ký|thông tin|bài|đề cử|câu trả lời|phản hồi)|mã (hồ sơ|đăng ký|dự thi|xác nhận|đơn)\s*[:#]|số báo danh|thank you|successfully|has been (received|submitted)|we(’|')?ve received|your response has been recorded|câu trả lời của bạn đã được ghi lại/i;
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  while (w.nextNode()) {
+    const t = w.currentNode.textContent.replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 300 || old.has(t) || !RE.test(t)) continue;
+    const el = w.currentNode.parentElement; const r = el && el.getBoundingClientRect();
+    if (r && r.width > 1 && r.height > 1 && getComputedStyle(el).visibility !== 'hidden') return t.slice(0, 200);
+  }
+  return '';
+}
+/* Trước khi gửi thật: có ô thẻ thanh toán, CAPTCHA giải đố, hoặc ô OTP mới không? */
+function guardCheck() {
+  const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase();
+  const vis = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 1 && r.height > 1 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+  const ctrls = Array.from(document.querySelectorAll('input:not([type=hidden]), select, textarea')).filter(vis);
+  const txt = (el) => fold([el.name, el.id, el.getAttribute('placeholder'), el.getAttribute('aria-label'), el.labels && el.labels[0] && el.labels[0].innerText].join(' '));
+  const payment = ctrls.some((el) => /^cc-/.test(el.getAttribute('autocomplete') || '') || /card.?number|so the|cvv|cvc|expir|ngay het han the/.test(txt(el))) || /vnpay|vnpayment|momo\.vn|zalopay|onepay|payoo|napas|stripe|paypal|checkout\.|payment\./i.test(location.host);
+  const captcha = Array.from(document.querySelectorAll('iframe')).some((f) => vis(f) && f.getBoundingClientRect().height > 40 && /recaptcha\/(api2|enterprise)\/anchor|hcaptcha\.com|challenges\.cloudflare\.com/.test(f.src) && !/size=invisible/.test(f.src));
+  const otp = ctrls.some((el) => el.getAttribute('data-fx-old') !== '1' && (/one-time-code/.test(el.getAttribute('autocomplete') || '') || /\botp\b|ma xac (thuc|nhan)|verification code|ma kich hoat/.test(txt(el))));
+  return { payment, captcha, otp };
 }
 
 /* ================= Phía máy chủ ================= */
@@ -381,7 +414,7 @@ async function capture(page, seen, kind, opts = {}) {
   return { kind, fresh, url: page.url(), title: info.title, heading: info.heading, html, shot: shot.data, shotW: shot.w, shotH: shot.h, metrics: { controls, desktop, focus, page: info } };
 }
 const sigChanged = (a, b) => a !== b;
-async function waitChange(page, before, ms) {
+async function waitChange(page, before, ms, texts) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
     await sleep(300);
@@ -389,19 +422,37 @@ async function waitChange(page, before, ms) {
     if (/^chrome-error:/.test(url)) return 'error';
     const now = await page.evaluate(stateSig).catch(() => null);
     if (now && sigChanged(now, before)) { await sleep(500); return 'changed'; }
+    if (texts && (await page.evaluate(successText, texts).catch(() => ''))) { await sleep(400); return 'changed'; }
   }
   return '';
 }
 
+/* Chế độ gửi thật: cần email + số điện thoại của người chấm (để OTP, email xác nhận về đúng người) */
+function readOptions(req, body) {
+  const q = req.method === 'GET' ? new URL(req.url, 'http://x').searchParams : null;
+  const pick = (k) => (q ? q.get(k) : body && (body.profile ? body.profile[k] : body[k])) || '';
+  const submit = q ? q.get('submit') === '1' : !!(body && body.submit);
+  if (!submit) return { submit: false, profile: { name: 'Nguyễn Văn An', email: 'kiemthu.tudong@example.com', phone: '0912345678' } };
+  const email = String(pick('email')).trim(), phone = String(pick('phone')).replace(/[^\d+]/g, '').replace(/^\+?84/, '0');
+  const name = String(pick('name')).trim().slice(0, 80) || 'Nguyễn Văn Kiểm Thử';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new UserError('Chế độ gửi thật cần email của bạn để nhận xác nhận');
+  if (!/^0\d{9}$/.test(phone)) throw new UserError('Chế độ gửi thật cần số điện thoại của bạn (10 chữ số)');
+  return { submit: true, profile: { name, email, phone } };
+}
+
 export default async function handler(req, res) {
   const t0 = Date.now();
-  const left = () => BUDGET_MS - (Date.now() - t0);
+  let budget = BUDGET_MS;
+  const left = () => budget - (Date.now() - t0);
   let browser;
-  const killer = setTimeout(() => { try { browser && browser.close(); } catch (e) { /* bỏ qua */ } }, 57000);
+  const killer = setTimeout(() => { try { browser && browser.close(); } catch (e) { /* bỏ qua */ } }, BUDGET_SUBMIT_MS + 10000);
   try {
     const body = req.method === 'POST' ? await readBody(req) : {};
     let url = await checkUrl(targetFrom(req, body));
     checkCaller(req, url);
+    const opts = readOptions(req, body);
+    const SUBMIT = opts.submit, P = opts.profile;
+    if (SUBMIT) budget = BUDGET_SUBMIT_MS;
     ensureSampleFiles();
     const local = process.env.CHROME_PATH;
     browser = await puppeteer.launch(local
@@ -411,7 +462,7 @@ export default async function handler(req, res) {
     await page.setUserAgent(UA_DESKTOP);
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.6' });
     await page.setRequestInterception(true);
-    const net = { reqs: 0, blocked: 0, writes: [], block: false };
+    const net = { reqs: 0, blocked: 0, writes: [], block: false, sent: 0 };
     page.on('request', async (r) => {
       try {
         const u = new URL(r.url());
@@ -420,11 +471,13 @@ export default async function handler(req, res) {
         if (net.block && !['GET', 'HEAD', 'OPTIONS'].includes(r.method())) { net.writes.push(`${r.method()} ${u.host}${u.pathname}`.slice(0, 120)); return r.abort(); }
         if (!(await hostIsPublic(u.hostname))) { net.blocked++; return r.abort(); }
         net.reqs++;
+        if (!['GET', 'HEAD', 'OPTIONS'].includes(r.method()) && r.resourceType() !== 'ping') net.sent++;
         return r.continue();
       } catch (e) { try { r.abort(); } catch (x) { /* bỏ qua */ } }
     });
     const dialogs = [];
-    page.on('dialog', (d) => { dialogs.push(d.message().slice(0, 200)); d.dismiss().catch(() => {}); });
+    /* Hộp thoại: khi gửi thật thì đồng ý "Bạn có chắc muốn gửi?", còn lại thì đóng */
+    page.on('dialog', (d) => { dialogs.push(d.message().slice(0, 200)); (SUBMIT && !net.block && d.type() === 'confirm' ? d.accept() : d.dismiss()).catch(() => {}); });
 
     const notes = [];
     const go = async (u) => {
@@ -483,69 +536,101 @@ export default async function handler(req, res) {
     }
 
     /* Đi qua các bước */
-    let stop = null, probe = null, probed = false, probeAt = -1;
-    for (let s = 0; s < MAX_STEPS; s++) {
+    let stop = null, probe = null, probed = false, probeAt = -1, submitted = false, lastBtn = '', prevTexts = [];
+    const limit = SUBMIT ? MAX_STEPS_SUBMIT : MAX_STEPS;
+    for (let s = 0; s < limit; s++) {
       const cnt = await page.evaluate(countControls).catch(() => 0);
-      const cap = await capture(page, seen, cnt ? 'form' : 'page', { focus: !probed && cnt > 0 });
-      if (cnt && !cap.fresh && steps.some((x) => x.kind === 'form')) { stop = { kind: 'nochange', text: '' }; break; }
+      const ok = submitted ? await page.evaluate(successText, prevTexts).catch(() => '') : '';
+      const kind = submitted && (ok || !cnt) ? 'done' : cnt ? 'form' : 'page';
+      const cap = await capture(page, seen, kind, { focus: !probed && cnt > 0 });
+      if (kind === 'done') { cap.success = ok; steps.push(cap); stop = { kind: 'done', text: lastBtn, success: ok }; break; }
+      if (cnt && !cap.fresh && steps.some((x) => x.kind === 'form')) { stop = { kind: 'nochange', text: lastBtn }; break; }
       steps.push(cap);
       if (!cnt) { stop = { kind: steps.some((x) => x.kind === 'form') ? 'end' : 'nofields' }; break; }
-      if (left() < 9000) { stop = { kind: 'time' }; break; }
+      if (left() < 12000) { stop = { kind: 'time' }; break; }
+      if (SUBMIT && (await page.evaluate(guardCheck)).otp) { stop = { kind: 'otp' }; break; }
       let btn = await page.evaluate(findButtons);
-      /* Bước đầu: bấm khi để trống để xem cách báo lỗi (đã chặn gửi dữ liệu) */
+      /* Bước đầu: bấm khi để trống để xem cách báo lỗi. Luôn chặn gửi dữ liệu ở lần bấm này (không tạo hồ sơ rỗng). */
       if (!probed && ((btn.next && !btn.nextOff) || (!btn.next && btn.submit && !btn.submitOff))) {
         probed = true; probeAt = s; net.block = true;
+        const here = page.url();
         const before = await page.evaluate(visibleTexts).catch(() => []);
         const sig0 = await page.evaluate(stateSig);
         const nd = dialogs.length, nw = net.writes.length;
         await page.evaluate((k) => { const b = document.querySelector(`[data-fx-b="${k}"]`); if (b) b.click(); }, btn.next ? 'next' : 'submit');
         const ch = await waitChange(page, sig0, 1600);
-        if (ch === 'error') { stop = { kind: 'post', text: btn.next || btn.submit }; break; }
-        await page.evaluate(measure, 'mobile').catch(() => {});
-        probe = await page.evaluate(readErrors, before).catch(() => null);
-        if (probe) {
-          probe.clicked = btn.next || btn.submit; probe.dialogs = dialogs.slice(nd); probe.advanced = ch === 'changed'; probe.writes = net.writes.length - nw;
-          /* Thử gõ dở email để xem có báo lỗi khi đang gõ không */
-          if (!probe.advanced) {
-            const em = await page.$('input[type=email]:not([data-fx-old]), input[autocomplete=email]:not([data-fx-old])');
-            if (em && (await em.boundingBox())) {
-              const b2 = await page.evaluate(visibleTexts).catch(() => []);
-              await em.click({ clickCount: 3 }).catch(() => {}); await page.keyboard.type('kiemthu', { delay: 25 }); await sleep(700);
-              const e2 = await page.evaluate(readErrors, b2).catch(() => null);
-              probe.typing = e2 ? e2.errors.filter((e) => e.isNew).map((e) => e.text).slice(0, 3) : [];
-              await em.click({ clickCount: 3 }).catch(() => {}); await page.keyboard.press('Backspace').catch(() => {});
+        if (ch === 'error') {
+          if (!SUBMIT) { stop = { kind: 'post', text: btn.next || btn.submit }; break; }
+          await go(here); /* form gửi thẳng lên máy chủ khi để trống: mở lại rồi điền */
+          await page.evaluate(measure, 'mobile').catch(() => {});
+        } else {
+          await page.evaluate(measure, 'mobile').catch(() => {});
+          probe = await page.evaluate(readErrors, before).catch(() => null);
+          if (probe) {
+            probe.clicked = btn.next || btn.submit; probe.dialogs = dialogs.slice(nd); probe.advanced = ch === 'changed'; probe.writes = net.writes.length - nw;
+            /* Thử gõ dở email để xem có báo lỗi khi đang gõ không */
+            if (!probe.advanced) {
+              const em = await page.$('input[type=email]:not([data-fx-old]), input[autocomplete=email]:not([data-fx-old])');
+              if (em && (await em.boundingBox())) {
+                const b2 = await page.evaluate(visibleTexts).catch(() => []);
+                await em.click({ clickCount: 3 }).catch(() => {}); await page.keyboard.type('kiemthu', { delay: 25 }); await sleep(700);
+                const e2 = await page.evaluate(readErrors, b2).catch(() => null);
+                probe.typing = e2 ? e2.errors.filter((e) => e.isNew).map((e) => e.text).slice(0, 3) : [];
+                await em.click({ clickCount: 3 }).catch(() => {}); await page.keyboard.press('Backspace').catch(() => {});
+              }
             }
           }
+          if (probe && probe.advanced) { notes.push(`Bấm "${probe.clicked}" khi để trống: form vẫn chuyển bước, không báo lỗi.`); continue; }
         }
-        if (probe && probe.advanced) { notes.push(`Bấm "${probe.clicked}" khi để trống: form vẫn chuyển bước, không báo lỗi.`); continue; }
         btn = await page.evaluate(findButtons);
       }
-      if (!btn.next) { stop = btn.submit ? { kind: 'submit', text: btn.submit, off: btn.submitOff } : { kind: 'end' }; break; }
-      /* Điền dữ liệu thử rồi bấm Tiếp */
-      net.block = true;
-      const fill = await page.evaluate(fillVisible);
+      let target = btn.next ? 'next' : btn.submit ? 'submit' : '';
+      if (!target) { stop = { kind: 'end' }; break; }
+      if (target === 'submit' && !SUBMIT) { stop = { kind: 'submit', text: btn.submit, off: btn.submitOff }; break; }
+      if (SUBMIT) {
+        if (PAY_RE.test(fold(btn[target]))) { stop = { kind: 'payment', text: btn[target] }; break; }
+        const g = await page.evaluate(guardCheck);
+        if (g.payment) { stop = { kind: 'payment', text: btn[target] }; break; }
+        if (g.captcha) { stop = { kind: 'captcha', text: btn[target] }; break; }
+      }
+      /* Điền thông tin thử rồi bấm Tiếp (hoặc Gửi khi đang ở chế độ gửi thật) */
+      net.block = !SUBMIT;
+      const fill = await page.evaluate(fillVisible, P);
       for (const f of fill.files) {
         const h = await page.$(`[data-fx-i="${f.i}"]`);
         if (h) await h.uploadFile(f.img ? JPG_PATH : PDF_PATH).catch(() => {});
       }
-      await sleep(500);
+      await sleep(SUBMIT && fill.files.length ? 2500 : 500);
       if (probe && s === probeAt && probe.errors.length) {
         const still = await page.evaluate(readErrors, []).catch(() => null);
         if (still) probe.stale = still.errors.filter((e) => probe.errors.some((p) => p.text === e.text && p.i === e.i)).map((e) => e.text).slice(0, 5);
       }
       btn = await page.evaluate(findButtons);
-      if (!btn.next) { stop = { kind: 'end' }; break; }
-      if (btn.nextOff) { stop = { kind: 'invalid', text: btn.next, off: true, errors: [] }; break; }
+      target = btn.next ? 'next' : btn.submit ? 'submit' : '';
+      if (!target) { stop = { kind: 'end' }; break; }
+      if (target === 'submit' && !SUBMIT) { stop = { kind: 'submit', text: btn.submit, off: btn.submitOff }; break; }
+      if (btn[target + 'Off']) { stop = { kind: 'invalid', text: btn[target], off: true, errors: [] }; break; }
+      if (SUBMIT && PAY_RE.test(fold(btn[target]))) { stop = { kind: 'payment', text: btn[target] }; break; }
+      prevTexts = await page.evaluate(visibleTexts).catch(() => []);
       const sig = await page.evaluate(stateSig);
-      const nw = net.writes.length;
-      const bt = btn.next;
-      await page.evaluate(() => { const b = document.querySelector('[data-fx-b="next"]'); if (b) b.click(); });
-      const ch = await waitChange(page, sig, 5000);
-      if (ch === 'error') { stop = { kind: 'post', text: bt }; break; }
+      const nw = net.writes.length, ns = net.sent;
+      lastBtn = btn[target];
+      await page.evaluate((k) => { const b = document.querySelector(`[data-fx-b="${k}"]`); if (b) b.click(); }, target);
+      const ch = await waitChange(page, sig, target === 'submit' ? 14000 : 6000, SUBMIT ? prevTexts : null);
+      if (ch === 'error') { stop = SUBMIT ? { kind: 'server', text: lastBtn, errors: ['Trang không tải được sau khi bấm (lỗi kết nối hoặc máy chủ)'] } : { kind: 'post', text: lastBtn }; break; }
       if (!ch) {
-        const er = await page.evaluate(readErrors, []).catch(() => null);
-        const msgs = er ? [...er.errors.map((e) => e.text), ...er.native.map((x) => x.msg)].filter(Boolean) : [];
-        stop = net.writes.length > nw ? { kind: 'post', text: bt } : msgs.length ? { kind: 'invalid', text: bt, errors: [...new Set(msgs)].slice(0, 5) } : { kind: 'nochange', text: bt };
+        const er = await page.evaluate(readErrors, prevTexts).catch(() => null);
+        const msgs = er ? [...er.errors.filter((e) => e.isNew || target === 'next').map((e) => e.text), ...er.native.map((x) => x.msg)].filter(Boolean) : [];
+        if (!SUBMIT && net.writes.length > nw) stop = { kind: 'post', text: lastBtn };
+        else if (msgs.length) stop = { kind: SUBMIT && target === 'submit' && net.sent > ns ? 'server' : 'invalid', text: lastBtn, errors: [...new Set(msgs)].slice(0, 5) };
+        else stop = { kind: SUBMIT && target === 'submit' && net.sent > ns ? 'noreply' : 'nochange', text: lastBtn };
+        break;
+      }
+      if (target === 'submit') submitted = true;
+      if (SUBMIT && GATEWAY_RE.test(new URL(page.url()).host)) {
+        await settle(page, 5000);
+        steps.push(await capture(page, seen, 'page'));
+        stop = { kind: 'payment', text: lastBtn, gateway: new URL(page.url()).host };
         break;
       }
       await settle(page, 6000);
@@ -562,7 +647,7 @@ export default async function handler(req, res) {
     const first = steps.find((x) => x.kind === 'form') || steps[0];
     send(res, 200, {
       ok: true, mode: 'render', finalUrl: first.url, status, note: notes.join(' '), truncated,
-      steps, probe, stop, net: { requests: net.reqs, blocked: net.blocked, writes: net.writes.length },
+      steps, probe, stop, submit: SUBMIT, submitted, net: { requests: net.reqs, blocked: net.blocked, writes: net.writes.length },
       ms: Date.now() - t0,
     });
   } catch (e) {

@@ -30,7 +30,7 @@
   ],
   "functions": {
     "api/render.js": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "api/fetch.js": {
       "maxDuration": 20

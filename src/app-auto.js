@@ -3,6 +3,14 @@
    ============================================================ */
 const AZ_UI = { src: 'url', mode: 'render', files: [], filter: 'fail', running: false };
 let AZ_LAST = store.get('fx-az-last', null);
+/* Chế độ gửi thật: nhớ lựa chọn và thông tin thử trên máy người dùng */
+let AZ_SUB = store.get('fx-az-sub', { on: false, name: '', email: '', phone: '', ok: false });
+const AZ_PCFG = {
+  name: { id: 'azp-name', label: 'Họ và tên dùng để thử', required: false, autocomplete: 'name', autocapitalize: 'words', spellcheck: false, norm: 'name' },
+  email: { ...DC.email('azp'), label: 'Email nhận xác nhận', hint: 'Email của bạn, để nhận email xác nhận của form' },
+  phone: { ...DC.phone('azp'), label: 'Số điện thoại nhận OTP, SMS', hint: 'Số của bạn. Công cụ dừng lại nếu form đòi mã OTP' },
+  ok: { id: 'azp-ok', kind: 'check', label: 'Tôi có quyền kiểm thử form này và đồng ý tạo một hồ sơ thử trên hệ thống của form', required: true, emptyMsg: 'Xác nhận bạn có quyền kiểm thử form này để gửi thật' },
+};
 
 /* Kịch bản kiểm thử liên quan tới từng nguyên tắc */
 const AZ_TESTS = {};
@@ -25,6 +33,17 @@ function viewAuto(main) {
               <label class="f-choice" for="az-mode-r"><input type="radio" id="az-mode-r" name="az-mode" value="render" ${AZ_UI.mode === 'render' ? 'checked' : ''}><span>Đầy đủ (khuyến nghị)<span class="f-choice-d">Mở trang như trình duyệt: chạy JavaScript, đo cỡ chữ, vùng chạm, tương phản, bố cục, focus. Mất 15–40 giây.</span></span></label>
               <label class="f-choice" for="az-mode-f"><input type="radio" id="az-mode-f" name="az-mode" value="fetch" ${AZ_UI.mode === 'fetch' ? 'checked' : ''}><span>Nhanh<span class="f-choice-d">Chỉ đọc mã HTML, 2–5 giây. Không thấy form tạo bằng JavaScript.</span></span></label>
             </div></fieldset>
+          <div id="az-sub-box" ${AZ_UI.mode === 'render' ? '' : 'hidden'}>
+            <fieldset class="f-field f-fs"><legend class="f-label">Khi tới bước phải gửi dữ liệu lên máy chủ</legend>
+              <div class="f-choices">
+                <label class="f-choice" for="az-sub-0"><input type="radio" id="az-sub-0" name="az-sub" value="0" ${AZ_SUB.on ? '' : 'checked'}><span>Dừng lại, không gửi<span class="f-choice-d">An toàn với mọi trang. Chỉ chấm được các bước trước khi gửi dữ liệu.</span></span></label>
+                <label class="f-choice" for="az-sub-1"><input type="radio" id="az-sub-1" name="az-sub" value="1" ${AZ_SUB.on ? 'checked' : ''}><span>Gửi thật như người đăng ký<span class="f-choice-d">Đi hết các bước tới trang xác nhận và chấm cả trang xác nhận. Tạo một hồ sơ thử thật trên hệ thống của form. Dừng trước bước thanh toán, OTP và CAPTCHA. Mất 30–100 giây.</span></span></label>
+              </div></fieldset>
+            <div class="az-profile" id="az-profile" ${AZ_SUB.on ? '' : 'hidden'}>
+              <p class="az-profile-h">${ic('info', 16)}<span>Thông tin dùng để đăng ký thử, chỉ lưu trên máy của bạn. Mỗi lần chấm tạo một hồ sơ; nếu form không cho đăng ký trùng email, lần sau dùng dạng <b>ten+2@gmail.com</b>. Nhớ xóa hồ sơ thử trong trang quản trị.</span></p>
+              ${fieldHTML(AZ_PCFG.name)}${fieldHTML(AZ_PCFG.email)}${fieldHTML(AZ_PCFG.phone)}${fieldHTML(AZ_PCFG.ok)}
+            </div>
+          </div>
         </div>
         <div data-azpane="file" ${AZ_UI.src === 'file' ? '' : 'hidden'}>
           <div class="f-field" id="fw-az-files"><label class="f-label" for="az-files">Tệp HTML của luồng đăng ký</label>
@@ -47,13 +66,17 @@ function viewAuto(main) {
   </div>`;
   const urlCtl = mountField({ id: 'az-url', label: 'Đường dẫn trang đăng ký', required: true, type: 'url', norm: 'url', v: 'url', emptyMsg: 'Nhập đường dẫn trang đăng ký' }, main);
   if (AZ_UI.lastUrl) urlCtl.set(AZ_UI.lastUrl);
+  AZ_UI.p = { name: mountField(AZ_PCFG.name, main), email: mountField(AZ_PCFG.email, main), phone: mountField(AZ_PCFG.phone, main), ok: mountField(AZ_PCFG.ok, main) };
+  AZ_UI.p.name.set(AZ_SUB.name || 'Nguyễn Văn Kiểm Thử'); if (AZ_SUB.email) AZ_UI.p.email.set(AZ_SUB.email); if (AZ_SUB.phone) AZ_UI.p.phone.set(AZ_SUB.phone);
+  if (AZ_SUB.ok) { const cb = $('#azp-ok', main); if (cb) cb.checked = true; }
+  $$('input[name="az-sub"]', main).forEach((r) => r.addEventListener('change', () => { AZ_SUB.on = r.value === '1'; $('#az-profile', main).hidden = !AZ_SUB.on; store.set('fx-az-sub', AZ_SUB); }));
   $$('[data-azsrc]', main).forEach((b) => b.addEventListener('click', () => {
     AZ_UI.src = b.dataset.azsrc;
     $$('[data-azsrc]', main).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     $$('[data-azpane]', main).forEach((p) => { p.hidden = p.dataset.azpane !== AZ_UI.src; });
     $('#az-sum').hidden = true;
   }));
-  $$('input[name="az-mode"]', main).forEach((r) => r.addEventListener('change', () => { AZ_UI.mode = r.value; }));
+  $$('input[name="az-mode"]', main).forEach((r) => r.addEventListener('change', () => { AZ_UI.mode = r.value; $('#az-sub-box', main).hidden = AZ_UI.mode !== 'render'; }));
   const fin = $('#az-files', main), drop = $('#az-drop', main);
   const addFiles = (list) => { Array.from(list).forEach((f) => { if (!AZ_UI.files.some((x) => x.name === f.name && x.size === f.size)) AZ_UI.files.push(f); }); drawFiles(); fin.value = ''; };
   fin.addEventListener('change', () => addFiles(fin.files));
@@ -84,8 +107,8 @@ function azProgress(steps, cur) {
   p.hidden = false;
   p.innerHTML = `<ol class="az-steps">${steps.map((s, i) => `<li class="${i < cur ? 'done' : i === cur ? 'cur' : ''}">${i < cur ? ic('ok', 16) : i === cur ? '<span class="spin" aria-hidden="true"></span>' : '<span class="az-dot"></span>'}<span>${esc(s)}</span></li>`).join('')}</ol>`;
 }
-async function azCall(path, url) {
-  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+async function azCall(path, url, extra) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, ...(extra || {}) }) });
   let j = null;
   try { j = await r.json(); } catch (e) { j = null; }
   if (!j) throw Object.assign(new Error('Dịch vụ đọc trang chưa sẵn sàng ở bản này. Hãy dùng "Tệp HTML" hoặc "Dán mã HTML".'), { noApi: true });
@@ -101,8 +124,16 @@ async function azRun(urlCtl) {
       const m = urlCtl.validate(true);
       if (m) { urlCtl.focus(); return; }
       const url = urlCtl.norm(); AZ_UI.lastUrl = url;
+      let extra = null;
+      if (AZ_UI.mode === 'render' && AZ_SUB.on && AZ_UI.p) {
+        const bad = ['email', 'phone', 'ok'].map((k) => AZ_UI.p[k]).filter((c) => c.validate(true));
+        if (bad.length) { bad[0].focus(); return; }
+        AZ_SUB = { on: true, name: AZ_UI.p.name.get() || 'Nguyễn Văn Kiểm Thử', email: AZ_UI.p.email.get(), phone: AZ_UI.p.phone.get(), ok: true };
+        store.set('fx-az-sub', AZ_SUB);
+        extra = { submit: true, profile: { name: AZ_SUB.name, email: AZ_SUB.email, phone: AZ_SUB.phone } };
+      }
       azBusy(true);
-      await azRunUrl(url, AZ_UI.mode);
+      await azRunUrl(url, AZ_UI.mode, extra);
     } else if (AZ_UI.src === 'file') {
       const ctl = { id: 'az-files', el: $('#fw-az-files'), inputs: () => [$('#az-files')] };
       if (!AZ_UI.files.length) { setErr(ctl, 'Chọn ít nhất một tệp HTML'); $('#az-files').focus(); return; }
@@ -144,13 +175,15 @@ function azFail(e) {
   sum.innerHTML = `<div class="f-banner err" role="alert">${ic('alert', 20)}<div><b>${esc(e.message)}</b>${AZ_UI.src === 'url' && !e.noApi ? 'Bạn có thể lưu trang thành tệp HTML (Ctrl+S) rồi dùng mục "Tệp HTML".' : ''}</div></div>`;
   sum.hidden = false;
 }
-async function azRunUrl(url, mode) {
+async function azRunUrl(url, mode, extra) {
   let data = null, note = '';
+  const sub = !!(extra && extra.submit);
   if (mode === 'render') {
-    const steps = ['Mở trang, chờ form hiện ra', 'Đi qua từng bước: điền dữ liệu thử, bấm Tiếp (không gửi thật)', 'Đo cỡ chữ, vùng chạm, tương phản; chụp từng bước', `Chấm ${RULES.length} tiêu chí cho từng trường`];
+    const steps = sub ? ['Mở trang, chờ form hiện ra', 'Điền thông tin thử, đi qua từng bước và gửi hồ sơ thật', 'Đo cỡ chữ, vùng chạm, tương phản; chụp từng bước và trang xác nhận', `Chấm ${RULES.length} tiêu chí cho từng trường`]
+      : ['Mở trang, chờ form hiện ra', 'Đi qua từng bước: điền dữ liệu thử, bấm Tiếp (không gửi thật)', 'Đo cỡ chữ, vùng chạm, tương phản; chụp từng bước', `Chấm ${RULES.length} tiêu chí cho từng trường`];
     azProgress(steps, 0);
-    const t1 = setTimeout(() => azProgress(steps, 1), 6000), t2 = setTimeout(() => azProgress(steps, 2), 18000);
-    try { data = await azCall('/api/render', url); }
+    const t1 = setTimeout(() => azProgress(steps, 1), 6000), t2 = setTimeout(() => azProgress(steps, 2), sub ? 40000 : 18000);
+    try { data = await azCall('/api/render', url, extra); }
     catch (e) {
       if (e.noApi || !e.fallback) throw e;
       note = 'Không mở được trang bằng trình duyệt ẩn, đã chuyển sang đọc HTML (chế độ Nhanh).';
@@ -167,9 +200,9 @@ async function azRunUrl(url, mode) {
   if (data.steps && data.steps.length) {
     const forms = data.steps.filter((x) => x.kind !== 'landing').length;
     const probeAt = data.steps.findIndex((x) => x.kind === 'form');
-    const pages = data.steps.map((x, i) => azAnalyzePage(x.html, { metrics: x.metrics, url: x.url, status: i === 0 ? data.status : 0, multi: forms > 1, probe: i === probeAt ? data.probe : null }));
+    const pages = data.steps.map((x, i) => azAnalyzePage(x.html, { metrics: x.metrics, url: x.url, status: i === 0 ? data.status : 0, multi: forms > 1, probe: i === probeAt ? data.probe : null, done: x.kind === 'done', success: x.success, profile: sub ? extra.profile : null }));
     azFinish(pages, {
-      kind: 'url', url: data.finalUrl, mode: 'render', ms: data.ms, truncated: data.truncated, note: notes, stop: data.stop,
+      kind: 'url', url: data.finalUrl, mode: 'render', ms: data.ms, truncated: data.truncated, note: notes, stop: data.stop, submit: sub, submitted: !!data.submitted, email: sub ? extra.profile.email : '',
       probe: data.probe ? { clicked: data.probe.clicked, n: (data.probe.errors || []).length, advanced: !!data.probe.advanced, summary: !!data.probe.summary, native: (data.probe.native || []).length, dialogs: (data.probe.dialogs || []).length } : null,
       steps: data.steps.map((x) => ({ kind: x.kind, url: x.url, heading: x.heading, title: x.title, shot: x.shot, shotW: x.shotW, shotH: x.shotH })),
     });
@@ -181,7 +214,8 @@ async function azRunSample(which) {
   if (AZ_UI.running) return;
   if (which === 'flow') {
     azBusy(true);
-    try { await azRunUrl(location.origin + '/samples/landing', 'render'); } catch (e) { azFail(e); } finally { azBusy(false); }
+    const extra = AZ_SUB.on && AZ_SUB.ok && AZ_SUB.email && AZ_SUB.phone ? { submit: true, profile: { name: AZ_SUB.name || 'Nguyễn Văn Kiểm Thử', email: AZ_SUB.email, phone: AZ_SUB.phone } } : null;
+    try { await azRunUrl(location.origin + '/samples/landing', 'render', extra); } catch (e) { azFail(e); } finally { azBusy(false); }
     return;
   }
   let html, meta;
@@ -210,6 +244,8 @@ function azFinish(pages, meta) {
     return {
       n: i + 1, kind: m.kind || 'form', heading: m.heading || '', title: p.info.title || m.title || '', url: m.url || '',
       shot: m.shot || '', shotW: m.shotW || 390, shotH: m.shotH || 0, preview: m.shot ? '' : (p.info.preview || ''),
+      /* Trang không có ô nhập vẫn có tiêu chí riêng: trang giới thiệu (chuẩn bị, hạn chót, liên hệ), trang xác nhận (K1–K3, P3) */
+      checks: (m.kind === 'done' ? ['K1', 'K2', 'K3', 'P3'] : m.kind === 'landing' ? ['F1', 'D5', 'P2', 'T4'] : []).map((id) => ({ id, ...(p.R[id] || {}) })).filter((c) => c.st && c.st !== 'na'),
       fields: p.info.fields.map((f) => ({
         gn: ++gn, n: f.n, name: azCut(f.label ? azLabText(f) : azName(f), 48), kind: AZ_KIND[f.kind] || f.kind, type: f.tag === 'input' ? f.type : f.tag === 'select' ? 'select' : f.tag,
         im: f.im, ac: f.ac, req: f.req, rect: azFieldRect(f), code: azFixCode(f), errs: (f.errTexts || []).slice(0, 2),
@@ -223,7 +259,20 @@ function azFinish(pages, meta) {
     formSteps: steps.filter((s) => s.kind !== 'landing').length, blocked: pages.some((p) => p.info.blocked), closed: (pages.find((p) => p.info.closed) || { info: {} }).info.closed || '', http: pages[0].info.httpStatus || 0, vi: pages.some((p) => p.info.vi),
     iframes: meta.mode === 'render' ? [] : pages.flatMap((p) => p.info.iframes).filter((x) => AZ_IFRAME_FORM.test(x) && !AZ_IFRAME_SKIP.test(x)).slice(0, 3),
   };
-  const rep = { v: 2, R, fields, steps, info, meta: { ...meta, steps: undefined, ts: Date.now() } };
+  /* Vị trí từng tiêu chí trên ảnh: ô bị gắn lỗi + nút (V6, B1…) do bộ chấm ghi lại */
+  const locs = {};
+  steps.forEach((x, si) => {
+    x.fields.forEach((f) => f.probs.forEach((pb) => { if (f.rect) (locs[pb.id] = locs[pb.id] || []).push({ s: si, r: f.rect, gn: f.gn, name: f.name }); }));
+    RULES.forEach((r) => { const at = (pages[si].R[r.id] || {}).at; if (at) at.forEach((rc) => (locs[r.id] = locs[r.id] || []).push({ s: si, r: rc, name: 'nút bấm' })); });
+  });
+  /* Gửi thật: máy chủ trả lỗi hay không phản hồi → chấm V8 */
+  if (meta.stop && ['server', 'noreply'].includes(meta.stop.kind)) {
+    const errs = meta.stop.errors || [];
+    const gen = errs.some((e) => /co loi|loi xay ra|error|that bai|khong thanh cong|thu lai sau|something went wrong/.test(fold(e)) && e.length < 60);
+    R.V8 = !errs.length ? { st: 'fail', msg: `Bấm "${meta.stop.text}" xong không có phản hồi trong 14 giây: không chuyển trang, không báo lỗi.`, ev: [] }
+      : { st: gen ? 'fail' : 'pass', msg: gen ? 'Máy chủ từ chối hồ sơ thử bằng câu lỗi chung chung, không nói cách xử lý.' : 'Máy chủ từ chối hồ sơ thử và nói rõ lý do.', ev: errs.map((e) => `"${azCut(e, 90)}"`) };
+  }
+  const rep = { v: 3, R, fields, steps, locs, info, meta: { ...meta, steps: undefined, ts: Date.now() } };
   AZ_LAST = rep;
   azSave(rep);
   AZ_UI.filter = Object.values(R).some((x) => x.st === 'fail') ? 'fail' : 'all';
@@ -245,28 +294,34 @@ function azSave(rep) {
 
 /* ---------- Báo cáo ---------- */
 const AZ_STOP = {
-  submit: (x) => ({ ok: true, t: `Đã đọc hết luồng, dừng ở nút "${x.text}"`, d: `Công cụ không bấm gửi thật${x.off ? '. Nút này đang bị khóa sẵn (xem V6)' : ''}.` }),
+  submit: (x, m) => ({ ok: true, act: !m.submit, t: `Đã đọc hết các bước, dừng ở nút "${x.text}"`, d: `Chế độ an toàn nên công cụ không bấm gửi${x.off ? '. Nút này đang bị khóa sẵn (xem V6)' : ''}. Muốn chấm cả trang xác nhận, chấm lại ở chế độ "Gửi thật như người đăng ký".` }),
   end: () => ({ ok: true, t: 'Đã đọc hết các bước hiển thị', d: 'Không thấy nút sang bước tiếp theo.' }),
-  post: (x) => ({ ok: false, t: `Dừng ở nút "${x.text}": bước sau cần gửi dữ liệu lên máy chủ`, d: 'Công cụ dừng lại để không tạo hồ sơ thật. Muốn chấm các bước sau: tự đi qua từng bước, lưu mỗi bước thành tệp (Ctrl+S), rồi dùng mục "Tệp HTML".' }),
+  post: (x, m) => ({ ok: false, act: !m.submit, t: `Dừng ở nút "${x.text}": bước sau cần gửi dữ liệu lên máy chủ`, d: 'Chế độ an toàn nên công cụ dừng lại, không tạo hồ sơ. Muốn đi hết luồng tới trang xác nhận, chấm lại ở chế độ "Gửi thật như người đăng ký".' }),
   invalid: (x) => ({ ok: false, t: `Dừng ở nút "${x.text}": form không nhận dữ liệu thử`, d: `${x.off ? 'Nút vẫn bị khóa sau khi điền dữ liệu thử.' : x.errors && x.errors.length ? `Form báo: ${x.errors.map((e) => `"${azCut(e, 60)}"`).join(', ')}.` : ''} Các bước sau chưa đọc được: lưu từng bước thành tệp HTML để chấm tiếp.` }),
   nochange: (x) => ({ ok: false, t: `Bấm "${x.text || 'Tiếp'}" nhưng trang không đổi`, d: 'Các bước sau chưa đọc được: lưu từng bước thành tệp HTML để chấm tiếp.' }),
-  time: () => ({ ok: false, t: 'Hết thời gian cho phép (khoảng 50 giây)', d: 'Các bước sau chưa đọc được: lưu từng bước thành tệp HTML để chấm tiếp.' }),
-  limit: () => ({ ok: false, t: 'Đã đọc tối đa 6 bước', d: 'Nếu form còn bước sau, lưu các bước đó thành tệp HTML để chấm tiếp.' }),
+  time: () => ({ ok: false, t: 'Hết thời gian cho phép', d: 'Các bước sau chưa đọc được: lưu từng bước thành tệp HTML để chấm tiếp.' }),
+  limit: () => ({ ok: false, t: 'Đã đọc số bước tối đa', d: 'Nếu form còn bước sau, lưu các bước đó thành tệp HTML để chấm tiếp.' }),
   nofields: () => ({ ok: false, t: 'Không tìm thấy ô nhập nào', d: '' }),
+  done: (x, m) => ({ ok: true, t: 'Đã đăng ký thành công, tới trang xác nhận', d: `Hồ sơ thử đã được gửi bằng email ${m.email || ''}${x.success ? `; trang báo "${azCut(x.success, 90)}"` : ''}. Kiểm tra hộp thư để chấm email xác nhận (K2), rồi xóa hồ sơ thử trong trang quản trị.` }),
+  payment: (x) => ({ ok: false, t: `Dừng trước bước thanh toán${x.text ? ` (nút "${x.text}")` : ''}`, d: `Công cụ không thanh toán${x.gateway ? `; trang đã chuyển sang cổng ${x.gateway}` : ''}. Hồ sơ có thể đã được tạo ở trạng thái chờ thanh toán — nhớ xóa trong trang quản trị.` }),
+  captcha: (x) => ({ ok: false, t: `Dừng ở CAPTCHA trước nút "${x.text}"`, d: 'Công cụ không vượt CAPTCHA. Tắt CAPTCHA trên bản thử nghiệm rồi chấm lại, hoặc thử tay bước cuối. CAPTCHA giải đố cũng là lỗi tiếp cận (A5).' }),
+  otp: () => ({ ok: false, t: 'Dừng ở bước nhập mã OTP', d: 'Mã đã được gửi tới số điện thoại hoặc email bạn nhập. Công cụ không đọc được tin nhắn nên dừng ở đây; hãy thử tay bước này.' }),
+  server: (x) => ({ ok: false, t: `Bấm "${x.text}": máy chủ từ chối hồ sơ thử`, d: x.errors && x.errors.length ? `Trang báo: ${x.errors.map((e) => `"${azCut(e, 80)}"`).join(', ')}.` : '' }),
+  noreply: (x) => ({ ok: false, t: `Bấm "${x.text}" nhưng không có phản hồi trong 14 giây`, d: 'Không chuyển trang, không báo lỗi, không báo thành công (xem V8).' }),
 };
 const azWorst = (f) => (f.probs && f.probs.length ? f.probs[0].st : 'pass');
-function azStepLabels(steps) { let k = 0; return steps.map((x) => (x.kind === 'landing' ? 'Trang giới thiệu' : `Bước ${++k}`)); }
+function azStepLabels(steps) { let k = 0; return steps.map((x) => (x.kind === 'landing' ? 'Trang giới thiệu' : x.kind === 'done' ? 'Trang xác nhận' : x.kind === 'page' ? 'Trang tiếp theo' : `Bước ${++k}`)); }
 function azFlowHTML(rep) {
   const { meta, steps } = rep;
   const labels = azStepLabels(steps);
-  const st = meta.stop ? (AZ_STOP[meta.stop.kind] || AZ_STOP.end)(meta.stop) : null;
+  const st = meta.stop ? (AZ_STOP[meta.stop.kind] || AZ_STOP.end)(meta.stop, meta) : null;
   const pr = meta.probe;
   const prLine = pr ? (pr.advanced ? `Đã thử bấm "${pr.clicked}" khi để trống: form vẫn chuyển bước.` : `Đã thử bấm "${pr.clicked}" khi để trống: ${pr.dialogs ? 'form báo lỗi bằng hộp thoại của trình duyệt' : pr.n ? `form hiện ${pr.n} câu lỗi${pr.summary ? ', có tóm tắt lỗi' : ', không có tóm tắt lỗi'}` : pr.native ? 'chỉ có bong bóng báo lỗi của trình duyệt' : 'không thấy báo lỗi'}.`) : '';
   if (!rep.info.N || (steps.length < 2 && !st && !prLine)) return '';
   return `<div class="az-flow ${st && !st.ok ? 'part' : 'ok'}">
-    ${st ? `<p class="az-flow-h">${ic(st.ok ? 'ok' : 'alert', 18)}<span><b>${esc(st.t)}</b>${st.d ? ` ${esc(st.d)}` : ''}</span></p>` : ''}
+    ${st ? `<p class="az-flow-h">${ic(st.ok ? 'ok' : 'alert', 18)}<span><b>${esc(st.t)}</b>${st.d ? ` ${esc(st.d)}` : ''}</span></p>${st.act ? `<div class="btn-row"><button type="button" class="btn btn-sec btn-sm" data-azresub>${ic('spark', 15)}Chấm lại ở chế độ gửi thật</button></div>` : ''}` : ''}
     <ol class="az-flow-steps">${steps.map((x, i) => { const bad = x.fields.filter((f) => ['fail', 'warn'].includes(azWorst(f))).length; return `<li><button type="button" data-azstep="${x.n}"><b>${labels[i]}</b><span>${x.kind === 'landing' && !x.fields.length ? 'không có ô nhập' : `${x.fields.length} trường${bad ? ` · ${bad} cần sửa` : ''}`}</span></button></li>`; }).join('')}${st && !st.ok ? `<li class="az-flow-stop">${ic('x', 14)}Chưa đọc được</li>` : ''}</ol>
-    ${prLine ? `<p class="az-flow-d">${ic('target', 14)}<span>${esc(prLine)} Từ lúc này công cụ chặn mọi yêu cầu gửi dữ liệu, dùng email @example.com.</span></p>` : ''}
+    ${prLine ? `<p class="az-flow-d">${ic('target', 14)}<span>${esc(prLine)} ${meta.submit ? `Lần bấm thử này không gửi gì; sau đó công cụ điền thông tin của bạn (${esc(meta.email || '')}) và gửi thật.` : 'Từ lúc này công cụ chặn mọi yêu cầu gửi dữ liệu, dùng email @example.com.'}</span></p>` : ''}
   </div>`;
 }
 function azDrawReport(rep) {
@@ -314,6 +369,13 @@ function azDrawReport(rep) {
     <p class="muted az-limit">${ic('info', 15)}<span>Máy chỉ thấy những gì hiển thị và có trong mã trang. Công cụ điền dữ liệu thử để sang bước sau nhưng không bấm gửi và chặn mọi yêu cầu gửi dữ liệu, nên không tạo hồ sơ thật. Hành vi khi tải tệp, lỗi từ máy chủ, trang xác nhận, email phải thử tay — xem <a href="#kiem-thu">Kịch bản kiểm thử</a>.</span></p>
   </section>`;
   if (!info.N) return;
+  const rs = $('[data-azresub]', box);
+  if (rs) rs.addEventListener('click', () => {
+    const r1 = $('#az-sub-1'); if (r1) { r1.checked = true; r1.dispatchEvent(new Event('change')); }
+    const mr = $('#az-mode-r'); if (mr && !mr.checked) { mr.checked = true; mr.dispatchEvent(new Event('change')); }
+    const pf = $('#az-profile'); if (pf) { pf.scrollIntoView({ behavior: 'smooth', block: 'center' }); const first = ['azp-email', 'azp-phone'].map((id) => $('#' + id)).find((i) => i && !i.value) || $('#azp-ok'); if (first) setTimeout(() => first.focus({ preventScroll: true }), 350); }
+    toast('Nhập email, số điện thoại của bạn, đánh dấu xác nhận rồi bấm Chấm điểm');
+  });
   $$('[data-azstep]', box).forEach((b) => b.addEventListener('click', () => {
     if (AZ_UI.view !== 'fields') { AZ_UI.view = 'fields'; $$('[data-azv]', box).forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.azv === 'fields'))); azDrawPane(rep); }
     const t = $(`#az-step-${b.dataset.azstep}`); if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'start' }); const h = $('.az-step-h', t); if (h) h.focus({ preventScroll: true }); }
@@ -344,16 +406,19 @@ function azPinHTML(f, W, H) {
   const lab = `Trường ${f.gn}: ${f.name} — ${nF || nW ? [nF && `${nF} chưa đạt`, nW && `${nW} cần xem lại`].filter(Boolean).join(', ') : 'không phát hiện lỗi'}`;
   return `<span class="az-box st-${st}" data-azbox="${f.gn}" style="left:${pc(r.x, W)};top:${pc(r.y, H)};width:${pc(Math.min(r.w, W - r.x), W)};height:${pc(r.h, H)}"></span><button type="button" class="az-pin st-${st}" data-azpin="${f.gn}" style="left:${pc(Math.min(r.x + r.w, W - 14), W)};top:${pc(r.y, H)}" aria-label="${esc(lab)}" title="${esc(lab)}">${f.gn}</button>`;
 }
-function azCardHTML(f) {
+function azCardHTML(f, rep, si) {
   const st = azWorst(f);
+  const crop = rep && f.rect && rep.steps[si] && rep.steps[si].shot ? azCropHTML(rep, si, [f.rect], '', st) : '';
   const nF = f.probs.filter((x) => x.st === 'fail').length, nW = f.probs.filter((x) => x.st === 'warn').length;
   const badge = nF || nW ? [nF && `${nF} chưa đạt`, nW && `${nW} cần xem lại`].filter(Boolean).join(' · ') : 'Không phát hiện lỗi';
   return `<article class="az-fc st-${st}" id="az-fc-${f.gn}" data-azfc="${f.gn}" tabindex="-1" aria-labelledby="az-fc-t-${f.gn}">
     <div class="az-fc-h"><button type="button" class="az-num st-${st}" data-azgo="${f.gn}" aria-label="Xem vị trí trường ${f.gn} trên ảnh" ${f.rect || f.n ? '' : 'disabled'}>${f.gn}</button>
       <div class="az-fc-t"><h4 id="az-fc-t-${f.gn}">${esc(f.name)}</h4><p>${esc(f.kind)} · <code>${esc(f.type)}</code>${f.req ? ' · bắt buộc' : ''}</p></div>
       <span class="az-fc-badge st-${st}">${badge}</span></div>
+    ${crop && f.probs.length ? `<div class="az-fc-crop">${crop}</div>` : ''}
     ${f.probs.length ? `<ul class="az-probs">${f.probs.map((x) => { const r = RULE_BY_ID[x.id]; return `<li class="st-${x.st}"><div class="az-pt"><span class="az-st">${ic(AZ_ST[x.st].ic, 14)}${AZ_ST[x.st].n}</span>${ruleChip(x.id)}<b>${fmt(r.t)}</b></div>
-      <p class="az-pp"><span class="az-lb">Vấn đề</span><span>${fmt(x.msg)}</span></p><p class="az-pp"><span class="az-lb">Cách sửa</span><span>${fmt(x.fix)}</span></p></li>`; }).join('')}</ul>` : ''}
+      <p class="az-pp"><span class="az-lb">Vấn đề</span><span>${fmt(x.msg)}</span></p><p class="az-pp"><span class="az-lb">Cách sửa</span><span>${fmt(x.fix)}</span></p>
+      ${rep ? `<details class="az-g-more"><summary>${ic('down', 15, 'chev')}Hướng dẫn chi tiết, minh họa đúng</summary>${azGuideHTML(rep, r, x.st, { noActual: true })}</details>` : ''}</li>`; }).join('')}</ul>` : ''}
     ${f.errs && f.errs.length ? `<p class="az-errs">${ic('alert', 14)}<span>Khi để trống, form báo: ${f.errs.map((t) => `"${esc(t)}"`).join(', ')}</span></p>` : ''}
     ${f.code ? `<details class="az-code"><summary>${ic('down', 16, 'chev')}Mã gợi ý: hiện tại → nên sửa</summary><div class="az-code-g"><div><p class="az-code-l">Hiện tại</p><pre tabindex="0"><code>${esc(f.code.cur)}</code></pre></div><div><p class="az-code-l">Nên sửa thành <button type="button" class="btn btn-ghost btn-sm" data-azcopy="${f.gn}">${ic('copy', 14)}Sao chép</button></p><pre tabindex="0"><code>${esc(f.code.rec)}</code></pre></div></div></details>` : ''}
   </article>`;
@@ -368,8 +433,7 @@ function azFormIssues(rep) {
     ${list.length ? `<div class="az-gl-list">${list.map((r) => { const x = rep.R[r.id]; return `<article class="az-gc st-${x.st}"><div class="az-pt"><span class="az-st">${ic(AZ_ST[x.st].ic, 14)}${AZ_ST[x.st].n}</span>${ruleChip(r.id)}<b>${fmt(r.t)}</b>${lvPill(r.lv)}</div>
       <p class="az-pp"><span class="az-lb">Vấn đề</span><span>${esc(x.msg)}</span></p>
       ${x.ev && x.ev.length ? `<ul class="az-ev">${x.ev.slice(0, 5).map((e) => `<li>${esc(e)}</li>`).join('')}${x.ev.length > 5 ? `<li class="muted">… và ${x.ev.length - 5} mục khác</li>` : ''}</ul>` : ''}
-      <p class="az-pp"><span class="az-lb">Cách sửa</span><span>${fmt(r.how[0])}${r.how[1] ? ' ' + fmt(r.how[1]) : ''}</span></p>
-      <a class="az-more" href="#nt-${r.id.toLowerCase()}">Xem nguyên tắc ${r.id}${ic('right', 14)}</a></article>`; }).join('')}</div>` : '<p class="muted">Không có.</p>'}
+      ${azGuideHTML(rep, r, x.st)}</article>`; }).join('')}</div>` : '<p class="muted">Không có.</p>'}
     ${manual ? `<p class="az-manual">${ic('pointer', 15)}<span>Còn ${manual} tiêu chí máy không tự kết luận được (hành vi khi gõ, tải tệp, lỗi máy chủ, trang xác nhận…). <button type="button" class="f-linkbtn" data-azv2="rules">Xem danh sách cần thử tay</button></span></p>` : ''}
   </section>`;
 }
@@ -383,12 +447,13 @@ function azFieldsHTML(rep) {
     const media = x.shot ? `<img class="az-shot-img" src="${x.shot}" alt="Ảnh chụp ${labels[i].toLowerCase()} trên điện thoại (390px), các ô được đánh số theo thẻ bên cạnh">`
       : x.preview ? `<iframe class="az-prev" sandbox="allow-same-origin" referrerpolicy="no-referrer" tabindex="-1" aria-hidden="true" title="Bản xem trước ${labels[i].toLowerCase()}" data-azprev="${x.n}"></iframe>`
         : `<div class="az-noshot">${ic('image', 22)}<span>${rep.meta.saved ? 'Ảnh chụp không được lưu lại sau khi tải lại trang. Chấm lại để xem ảnh có đánh số.' : 'Không có ảnh cho bước này.'}</span></div>`;
-    const empty = x.fields.length ? '<p class="muted az-allok">Các trường ở bước này không có lỗi tự động.</p>' : `<p class="muted">${x.kind === 'landing' ? 'Trang giới thiệu, không có ô nhập. Dùng để chấm thông tin cần chuẩn bị, hạn chót, liên hệ hỗ trợ.' : 'Không có ô nhập.'}</p>`;
+    const checks = (x.checks || []).length ? `<p class="az-g-h">${ic('check', 15)}${x.kind === 'done' ? 'Chấm trang xác nhận' : 'Chấm trang giới thiệu'}</p>${x.checks.map((c) => { const r = RULE_BY_ID[c.id]; return `<article class="az-gc st-${c.st}"><div class="az-pt"><span class="az-st">${ic(AZ_ST[c.st].ic, 14)}${AZ_ST[c.st].n}</span>${ruleChip(c.id)}<b>${fmt(r.t)}</b>${lvPill(r.lv)}</div><p class="az-pp"><span class="az-lb">${c.st === 'pass' ? 'Kết quả' : 'Vấn đề'}</span><span>${esc(c.msg || '')}</span></p>${c.ev && c.ev.length ? `<ul class="az-ev">${c.ev.slice(0, 4).map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}${['fail', 'warn'].includes(c.st) ? `<details class="az-g-more"><summary>${ic('down', 15, 'chev')}Hướng dẫn sửa, minh họa đúng</summary>${azGuideHTML(rep, r, c.st, { noActual: true })}</details>` : c.st === 'manual' ? azManualHTML(r) : ''}</article>`; }).join('')}` : '';
+    const empty = x.fields.length ? '<p class="muted az-allok">Các trường ở bước này không có lỗi tự động.</p>' : checks || `<p class="muted">${x.kind === 'landing' ? 'Trang giới thiệu, không có ô nhập.' : 'Không có ô nhập.'}</p>`;
     return `<section class="az-step" id="az-step-${x.n}" aria-labelledby="az-step-h-${x.n}">
       <h3 class="az-step-h" id="az-step-h-${x.n}" tabindex="-1"><span class="az-step-n">${labels[i]}</span><span class="az-step-t">${esc(x.heading || x.title || '')}</span><span class="muted az-step-c">${x.fields.length} trường${bad ? ` · ${bad} cần sửa` : ''}</span></h3>
       <div class="az-step-g">
         <div class="az-shotcol"><div class="az-shotwrap${x.shot ? '' : x.preview ? ' is-prev' : ' is-none'}" ${x.shot && x.shotH ? `style="aspect-ratio:${x.shotW} / ${x.shotH}"` : ''}>${media}<div class="az-pins">${pins}</div></div></div>
-        <div class="az-cards">${list.map(azCardHTML).join('') || empty}</div>
+        <div class="az-cards">${list.map((f) => azCardHTML(f, rep, i)).join('') || empty}</div>
       </div></section>`;
   }).join('');
   return `<div class="az-fbar"><label class="toggle-chip"><input type="checkbox" id="az-onlybad" ${only ? 'checked' : ''}> Chỉ hiện trường cần sửa</label>
@@ -458,6 +523,74 @@ function azMountPreview(fr, x) {
   });
   fr.srcdoc = x.preview;
 }
+/* ---------- Ảnh cắt từ trang thật + hướng dẫn sửa ---------- */
+/* Ảnh chụp từng bước đổi sang blob URL để nhiều ảnh cắt dùng chung, không nhân bản chuỗi base64 */
+const AZ_BLOBS = new Map();
+function azShotUrl(rep, si) {
+  const x = rep.steps && rep.steps[si]; if (!x || !x.shot) return '';
+  const key = `${rep.meta.ts}:${si}`;
+  if (!AZ_BLOBS.has(key)) {
+    try {
+      const [head, b64] = x.shot.split(','); const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      AZ_BLOBS.forEach((u, k) => { if (!k.startsWith(rep.meta.ts + ':')) { URL.revokeObjectURL(u); AZ_BLOBS.delete(k); } });
+      AZ_BLOBS.set(key, URL.createObjectURL(new Blob([u8], { type: (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' })));
+    } catch (e) { return x.shot; }
+  }
+  return AZ_BLOBS.get(key);
+}
+/* Cắt một vùng của ảnh chụp quanh các ô/nút, khoanh đỏ chỗ có lỗi */
+function azCropHTML(rep, si, rects, cap, st, top) {
+  const x = rep.steps[si]; const src = azShotUrl(rep, si);
+  if (!src || !x.shotH) return '';
+  const W = x.shotW || 390, H = x.shotH;
+  const rs = (rects || []).filter((r) => r && r.y < H && r.w > 0);
+  let x0, y0, x1, y1;
+  if (top || !rs.length) { x0 = 0; y0 = 0; x1 = W; y1 = Math.min(H, 380); }
+  else {
+    x0 = Math.min(...rs.map((r) => r.x)) - 14; y0 = Math.min(...rs.map((r) => r.y)) - 58; x1 = Math.max(...rs.map((r) => r.x + r.w)) + 14; y1 = Math.max(...rs.map((r) => r.y + r.h)) + 22;
+    if (x1 - x0 < 300) { const c = (x0 + x1) / 2; x0 = c - 150; x1 = c + 150; }
+    if (y1 - y0 < 120) { const c = (y0 + y1) / 2; y0 = c - 60; y1 = c + 60; }
+    y1 = Math.min(y1, y0 + 440);
+    if (x0 < 0) { x1 -= x0; x0 = 0; } if (x1 > W) { x0 = Math.max(0, x0 - (x1 - W)); x1 = W; }
+    y0 = Math.max(0, y0); y1 = Math.min(H, y1);
+  }
+  const cw = x1 - x0, ch = y1 - y0;
+  const pc = (v, t) => `${((v / t) * 100).toFixed(3)}%`;
+  const hl = top ? '' : rs.filter((r) => r.y < y1).map((r) => `<span class="az-crop-hl st-${st}" style="left:${pc(r.x - x0, cw)};top:${pc(r.y - y0, ch)};width:${pc(Math.min(r.w, x1 - r.x), cw)};height:${pc(Math.min(r.h, y1 - r.y), ch)}"></span>`).join('');
+  return `<figure class="az-crop-f"><div class="az-crop" style="aspect-ratio:${Math.round(cw)} / ${Math.round(ch)};max-width:${Math.round(cw * 1.35)}px"><img src="${src}" alt="" loading="lazy" style="width:${pc(W, cw)};left:${pc(-x0, cw)};top:${pc(-y0, ch)}">${hl}</div>${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`;
+}
+/* Ảnh minh họa cho một tiêu chí: tối đa 2 vùng cắt; tiêu chí cấp trang thì lấy phần đầu trang */
+function azCropsFor(rep, id, st) {
+  if (!rep.steps || !rep.steps.some((x) => x.shot)) return '';
+  const labels = azStepLabels(rep.steps);
+  const L = ((rep.locs || {})[id] || []).filter((l) => rep.steps[l.s] && rep.steps[l.s].shot);
+  const groups = [];
+  L.forEach((l) => { const g = groups.find((x) => x.s === l.s && Math.abs(x.y - l.r.y) < 260); if (g) { g.items.push(l); } else if (groups.length < 2) groups.push({ s: l.s, y: l.r.y, items: [l] }); });
+  if (groups.length) return groups.map((g) => azCropHTML(rep, g.s, g.items.map((l) => l.r), `${labels[g.s]} · ${g.items.map((l) => (l.gn ? `trường ${l.gn} "${esc(azCut(l.name, 30))}"` : esc(l.name))).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`, st)).join('');
+  const si = rep.steps.findIndex((x) => x.kind === 'form' && x.shot);
+  return si < 0 ? '' : azCropHTML(rep, si, [], `${labels[si]} · phần đầu trang (tiêu chí áp dụng cho cả trang)`, st, true);
+}
+/* Khối hướng dẫn cho tiêu chí chưa đạt / cần xem lại: ảnh trên trang của bạn, minh họa làm đúng, các bước sửa */
+function azGuideHTML(rep, r, st, opt = {}) {
+  const mock = r.mock && MOCKS[r.mock];
+  const crops = opt.noActual ? '' : azCropsFor(rep, r.id, st);
+  const hasShots = rep.steps && rep.steps.some((x) => x.shot);
+  const actual = opt.noActual ? '' : `<div class="az-g-col"><p class="az-g-h">${ic('eye', 15)}Trên trang của bạn</p>${crops || `<p class="muted az-g-none">${hasShots ? 'Lỗi này không gắn với một vị trí cụ thể trên ảnh.' : 'Chưa có ảnh: chấm bằng đường dẫn ở chế độ Đầy đủ để thấy vị trí lỗi trên ảnh chụp.'}</p>`}</div>`;
+  const good = `<div class="az-g-col"><p class="az-g-h ok">${ic('ok', 15)}Nên làm thế này</p>${mock ? `<div class="dd-mock mk az-g-mock" role="img" aria-label="Minh họa cách làm đúng">${mock.do}</div>` : ''}<ul class="az-g-do">${r.do.slice(0, 2).map((d) => `<li>${fmt(d)}</li>`).join('')}</ul></div>`;
+  return `<div class="az-guide">
+    <div class="az-g-grid${opt.noActual ? ' one' : ''}">${actual}${good}</div>
+    <div class="az-g-how"><p class="az-g-h">${ic('list', 15)}Cách sửa từng bước</p><ol class="az-g-ol">${r.how.map((h) => `<li>${fmt(h)}</li>`).join('')}</ol>
+      <p class="az-g-chk">${ic('check', 14)}<span><b>Kiểm tra lại:</b> ${fmt(r.chk)}</span></p>
+      <a class="az-more" href="#nt-${r.id.toLowerCase()}">${r.demo ? 'Xem nguyên tắc và thử demo chạy thật' : 'Xem đầy đủ nguyên tắc'} ${r.id}${ic('right', 14)}</a></div>
+  </div>`;
+}
+/* Tiêu chí cần thử tay: kịch bản thử từng bước + kết quả đúng */
+function azManualHTML(r) {
+  const tests = (AZ_TESTS[r.id] || []).slice(0, 2);
+  return `<div class="az-guide az-guide-m">${tests.length ? tests.map(([t, n]) => `<div class="az-g-test"><p class="az-g-h">${ic('target', 15)}Cách thử · Kịch bản ${n}: ${esc(t.t)}</p><p>${fmt(t.how)}</p><p class="az-g-exp"><b>Kết quả đúng:</b> ${fmt(t.exp)}</p></div>`).join('') : `<div class="az-g-test"><p class="az-g-h">${ic('target', 15)}Cách thử</p><p>${fmt(r.chk)}</p></div>`}
+    <details class="az-g-more"><summary>${ic('down', 15, 'chev')}Cách làm đúng theo bộ chuẩn</summary><ol class="az-g-ol">${r.how.map((h) => `<li>${fmt(h)}</li>`).join('')}</ol></details></div>`;
+}
 function azDrawList(rep) {
   const { R } = rep, f = AZ_UI.filter;
   const lvO = { m: 0, s: 1, c: 2 };
@@ -471,8 +604,7 @@ function azDrawList(rep) {
       <div class="az-body"><div class="az-t"><a class="rid" href="#nt-${r.id.toLowerCase()}">${r.id}</a> <a href="#nt-${r.id.toLowerCase()}">${fmt(r.t)}</a> ${lvPill(r.lv)}</div>
         ${x.msg ? `<p class="az-msg">${esc(x.msg)}</p>` : ''}
         ${x.ev && x.ev.length ? `<ul class="az-ev">${x.ev.slice(0, 10).map((e) => `<li>${esc(e)}</li>`).join('')}${x.ev.length > 10 ? `<li class="muted">… và ${x.ev.length - 10} mục khác</li>` : ''}</ul>` : ''}
-        ${['fail', 'warn'].includes(x.st) ? `<p class="az-fix">${ic('bulb', 14)}<span>${fmt(r.s)}</span></p>` : ''}
-        ${tests ? `<p class="az-fix">${ic('target', 14)}<span>${tests}</span></p>` : ''}
+        ${['fail', 'warn'].includes(x.st) ? azGuideHTML(rep, r, x.st) : x.st === 'manual' ? azManualHTML(r) : ''}
       </div></li>`;
   }).join('')}</ul>`;
   $$('[data-aztest]', el).forEach((a) => a.addEventListener('click', () => { PENDING = a.dataset.aztest; }));
@@ -491,7 +623,7 @@ function azMarkdown(rep) {
       return `### ${labels[i]}${x.heading ? ` · ${x.heading}` : ''}\n\n${fs.map((f) => `**#${f.gn} ${f.name}** (${f.kind}, \`${f.type}\`${f.req ? ', bắt buộc' : ''})\n${f.probs.map((p) => `- ${sym[p.st] || '·'} **${p.id}** ${plain(RULE_BY_ID[p.id].t)}\n  - Vấn đề: ${mdText(p.msg)}\n  - Cách sửa: ${mdText(p.fix)}`).join('\n')}${f.errs && f.errs.length ? `\n- Khi để trống, form báo: ${f.errs.map((t) => `"${t}"`).join(', ')}` : ''}${f.code ? `\n\n\`\`\`html\n${f.code.rec}\n\`\`\`` : ''}`).join('\n\n')}`;
     }).filter(Boolean).join('\n\n');
   }
-  const st = meta.stop ? (AZ_STOP[meta.stop.kind] || AZ_STOP.end)(meta.stop) : null;
+  const st = meta.stop ? (AZ_STOP[meta.stop.kind] || AZ_STOP.end)(meta.stop, meta) : null;
   return `# Chấm tự động UX form: ${info.title || src}\nNguồn: ${src} · ${new Date(meta.ts).toLocaleString('vi-VN')} · ${info.N} trường${(info.formSteps || info.steps) > 1 ? ` · ${info.formSteps || info.steps} bước` : ''}${st ? `\nLuồng: ${st.t}. ${st.d}` : ''}\n\n**Kết quả:** Chưa đạt ${s.fail} · Cần xem lại ${s.warn} · Đạt ${s.pass} · Cần thử tay ${s.manual} · Không áp dụng ${s.na}${s.mustFail ? `\n**${s.mustFail} tiêu chí Bắt buộc chưa đạt.**` : ''}${byField ? `\n\n## Theo từng trường\n\n${byField}` : ''}\n\n## Theo tiêu chí: chưa đạt\n${sec('fail')}\n\n## Theo tiêu chí: cần xem lại\n${sec('warn')}\n\n## Cần thử tay\n${RULES.filter((r) => (R[r.id] || {}).st === 'manual').map((r) => `${r.id}`).join(', ') || '_Không có_'}\n\n_Theo bộ Chuẩn UX Form Đăng ký — ${MD_SITE}_`;
 }
 function azImport(rep) {

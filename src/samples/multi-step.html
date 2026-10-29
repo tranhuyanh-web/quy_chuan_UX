@@ -52,6 +52,13 @@
       <button type="submit" id="send" hidden>Gửi hồ sơ</button>
     </div>
   </form>
+  <section class="card" id="done" hidden>
+    <h2>Đăng ký thành công</h2>
+    <p>Mã hồ sơ: <b id="code"></b></p>
+    <p>Chúng tôi đã gửi email xác nhận tới <span id="em"></span>.</p>
+    <p>Số điện thoại liên hệ: <span id="ph"></span></p>
+    <p>Bước tiếp theo: 15/12/2026 công bố danh sách vào vòng 2.</p>
+  </section>
 </div>
 <script>
 (function () {
@@ -82,7 +89,15 @@
   f.addEventListener('submit', function (e) {
     e.preventDefault();
     if (!valid(3)) return;
-    fetch('/api/vi-du-gui-ho-so', { method: 'POST', body: new FormData(f) }).catch(function () {});
+    var btn = document.getElementById('send'); btn.disabled = true; btn.textContent = 'Đang gửi…';
+    fetch('/api/vi-du-nhan-ho-so', { method: 'POST', body: new FormData(f) }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) throw new Error(j.error);
+      f.hidden = true; document.getElementById('ind').hidden = true;
+      document.getElementById('code').textContent = j.code;
+      document.getElementById('em').textContent = f.email.value;
+      document.getElementById('ph').textContent = f.sdt.value;
+      document.getElementById('done').hidden = false; window.scrollTo(0, 0);
+    }).catch(function () { btn.disabled = false; btn.textContent = 'Gửi hồ sơ'; alert('Có lỗi xảy ra'); });
   });
 })();
 </script>

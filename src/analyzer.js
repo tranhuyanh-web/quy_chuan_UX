@@ -146,8 +146,9 @@ function azHint(doc, el, labelNode) {
   }
   return '';
 }
+const azWords = (s) => String(s || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_\-.[\]]+/g, ' ');
 function azKindOf(f) {
-  const t = fold([f.label, f.name, f.id, f.ph, f.ac].join(' '));
+  const t = fold([f.label, azWords(f.name), azWords(f.id), f.ph, f.ac].join(' '));
   const lab = fold(f.label);
   if (f.type === 'file') return 'file';
   if (f.type === 'password') return /nhap lai|xac nhan|confirm|re-?enter|repeat|again|lap lai/.test(t) ? 'confirmPassword' : 'password';
@@ -165,10 +166,10 @@ function azKindOf(f) {
   if (/ngay sinh|nam sinh|sinh nhat|birth|\bdob\b|bday/.test(t)) return (/^(ngay|thang|nam|day|month|year|dd|mm|yyyy)$/.test(lab) || /bday-(day|month|year)/.test(t)) ? 'dobPart' : 'dob';
   if (/^(ngay|thang|nam)$/.test(lab)) return 'dobPart';
   if (/^tuoi$|\btuoi\b|\bage\b/.test(t)) return 'age';
-  if (/quan\s*\/?\s*huyen|quan huyen|\bhuyen\b|district/.test(t)) return 'district';
-  if (/phuong\s*\/?\s*xa|phuong|\bxa\b|ward|commune|address-level2/.test(t)) return 'ward';
-  if (/tinh\s*\/?\s*thanh|tinh thanh|\btinh\b|province|thanh pho|address-level1|\bcity\b/.test(t)) return 'province';
-  if (/dia chi|so nha|ten duong|address|street/.test(t)) return 'address';
+  if (/quan\s*\/?\s*huyen|quan huyen|\bhuyen\b|\bdistrict\b/.test(t)) return 'district';
+  if (/phuong\s*\/?\s*xa|\bphuong\b(?!\s*(thuc|an|phap|tien|huong|cham|trinh|vi))|\bxa\b(?!\s*hoi)|\bward\b|\bcommune\b|address-level2/.test(t)) return 'ward';
+  if (/tinh\s*\/?\s*thanh|tinh thanh|\btinh\b(?!\s*(trang|nang|chat|toan|cach|hinh|yeu|than|cam|diem|thue|phi))|\bprovince\b|thanh pho|address-level1|\bcity\b/.test(t)) return 'province';
+  if (/dia chi|so nha|ten duong|\baddress\b|\bstreet\b/.test(t)) return 'address';
   const nmF = fold(f.name).replace(/[\s_-]+/g, '');
   if (/^ho$|last ?name|surname|family ?name/.test(lab) || /^(ho|lastname|surname|familyname)$/.test(nmF) || /family-name/.test(f.ac)) return 'lastname';
   if (/^ten$|first ?name|given ?name/.test(lab) || /^(ten|firstname|givenname)$/.test(nmF) || /given-name/.test(f.ac)) return 'firstname';
@@ -201,6 +202,7 @@ function azCollect(doc, metrics) {
     }
     if (['hidden', 'submit', 'button', 'reset', 'image'].includes(type)) continue;
     if (el.getAttribute('data-fx-old') === '1') continue; /* đã chấm ở bước trước */
+    if (el.getAttribute('data-fx-search') === '1' || type === 'search' || el.closest('[role=search], form[role=search]')) continue; /* ô tìm kiếm của trang, không thuộc form */
     const { m, d } = mOf(el);
     const hid = azHidden(el) && !(m && m.styled);
     if (hid) continue;
@@ -394,6 +396,8 @@ function azAnalyzePage(html, opt = {}) {
   const btnText = (b) => azClean(b.tagName === 'INPUT' ? (b.getAttribute('value') || (b.type === 'submit' ? 'Submit' : b.type === 'reset' ? 'Reset' : '')) : (azVisText(b) || b.getAttribute('aria-label') || ''));
   const submits = buttons.filter((b) => (b.tagName === 'BUTTON' && (!b.getAttribute('type') || b.getAttribute('type') === 'submit') && b.closest('form')) || (b.tagName === 'INPUT' && /submit|image/.test(b.type)));
   const primary = submits.length ? submits : buttons.filter((b) => /gui|dang ky|tiep|hoan tat|nop|xac nhan|submit|send|next|continue/.test(fold(btnText(b))));
+  /* Vị trí nút trên ảnh chụp điện thoại (để cắt ảnh minh họa cho lỗi gắn với nút) */
+  const atOf = (els) => (metrics ? els.map((b) => { const m = (metrics.controls || [])[+b.getAttribute('data-fx-i')]; return m && m.vis ? m.r : null; }).filter(Boolean) : []);
   const resets = buttons.filter((b) => (b.getAttribute('type') || '').toLowerCase() === 'reset' || /^(nhap lai|lam lai|xoa (het|form|du lieu)|reset|clear)$/.test(fold(btnText(b))));
   const N = fields.length;
   const vp = (metrics && metrics.page && metrics.page.viewport) || ((doc.querySelector('meta[name=viewport]') || {}).getAttribute ? doc.querySelector('meta[name=viewport]').getAttribute('content') : '') || '';
@@ -714,7 +718,7 @@ function azAnalyzePage(html, opt = {}) {
   /* ===== V · Kiểm tra & lỗi (cần thử tay, trừ V6, V9) ===== */
   ['V1', 'V2', 'V3', 'V4', 'V5', 'V7', 'V8'].forEach((id) => put(id, N ? 'manual' : 'na', N ? 'Hành vi khi nhập và gửi — chỉ kiểm được bằng cách thử.' : ''));
   const disabledSubmit = primary.filter((b) => b.hasAttribute('disabled') || b.getAttribute('aria-disabled') === 'true');
-  if (disabledSubmit.length) put('V6', 'fail', 'Nút gửi bị khóa sẵn khi form chưa hợp lệ.', disabledSubmit.map((b) => `"${azCut(btnText(b), 30)}" có thuộc tính disabled`));
+  if (disabledSubmit.length) { put('V6', 'fail', 'Nút gửi bị khóa sẵn khi form chưa hợp lệ.', disabledSubmit.map((b) => `"${azCut(btnText(b), 30)}" có thuộc tính disabled`)); R.V6.at = atOf(disabledSubmit); }
   else put('V6', primary.length ? 'pass' : 'na', primary.length ? 'Nút gửi không bị khóa sẵn.' : 'Không tìm thấy nút gửi.');
   const descN = fields.filter((f) => f.el.getAttribute('aria-describedby')).length;
   put('V9', N ? 'manual' : 'na', N ? `${descN}/${N} trường có aria-describedby. Gây một lỗi rồi nghe bằng trình đọc màn hình để kiểm tra.` : '');
@@ -774,16 +778,16 @@ function azAnalyzePage(html, opt = {}) {
   else {
     const bad = primary.filter((b) => generic.test(fold(btnText(b))) || !btnText(b));
     const meh = primary.filter((b) => /^gui$/.test(fold(btnText(b))));
-    if (bad.length) put('B1', 'fail', 'Nhãn nút chung chung, không nói rõ hành động.', bad.map((b) => `"${btnText(b) || '(không có chữ)'}"`));
-    else if (meh.length) put('B1', 'warn', 'Nút "Gửi" chưa nói rõ gửi gì.', ['Gợi ý: "Gửi hồ sơ đăng ký"']);
+    if (bad.length) { put('B1', 'fail', 'Nhãn nút chung chung, không nói rõ hành động.', bad.map((b) => `"${btnText(b) || '(không có chữ)'}"`)); R.B1.at = atOf(bad); }
+    else if (meh.length) { put('B1', 'warn', 'Nút "Gửi" chưa nói rõ gửi gì.', ['Gợi ý: "Gửi hồ sơ đăng ký"']); R.B1.at = atOf(meh); }
     else put('B1', 'pass', `Nhãn nút rõ hành động: ${primary.slice(0, 3).map((b) => `"${azCut(btnText(b), 30)}"`).join(', ')}.`);
   }
-  if (resets.length) put('B2', 'fail', 'Có nút xóa toàn bộ form — bấm nhầm là mất hết dữ liệu.', resets.map((b) => `"${btnText(b)}"`));
+  if (resets.length) { put('B2', 'fail', 'Có nút xóa toàn bộ form — bấm nhầm là mất hết dữ liệu.', resets.map((b) => `"${btnText(b)}"`)); R.B2.at = atOf(resets); }
   else put('B2', primary.length ? 'pass' : 'manual', primary.length ? 'Không có nút xóa/reset form.' : 'Kiểm tra mỗi màn hình chỉ có một nút chính.');
   if (metrics && primary.length && textLike.length) {
     const last = textLike.reduce((a, f) => (f.d.r.y > a.d.r.y ? f : a), textLike[0]);
     const pb = metrics.desktop[+primary[0].getAttribute('data-fx-i')];
-    if (pb && pb.vis) { const gap = pb.r.y - (last.d.r.y + last.d.r.h); put('B3', gap > 320 ? 'warn' : 'pass', gap > 320 ? `Nút chính cách trường cuối ${gap}px.` : 'Nút chính nằm ngay sau trường cuối.'); }
+    if (pb && pb.vis) { const gap = pb.r.y - (last.d.r.y + last.d.r.h); put('B3', gap > 320 ? 'warn' : 'pass', gap > 320 ? `Nút chính cách trường cuối ${gap}px.` : 'Nút chính nằm ngay sau trường cuối.'); if (gap > 320) R.B3.at = atOf([primary[0]]); }
     else put('B3', 'manual', 'Kiểm tra vị trí nút chính.');
   } else put('B3', 'manual', 'Kiểm tra nút chính nằm ngay sau trường cuối, rộng hết màn hình trên điện thoại.');
   put('B4', primary.length ? 'manual' : 'na', 'Bấm gửi 3–4 lần thật nhanh để kiểm tra trạng thái "Đang gửi…" và chống gửi trùng.');
@@ -873,7 +877,7 @@ function azAnalyzePage(html, opt = {}) {
     const ev = [];
     if (noZoom) ev.push(`Chặn phóng to: viewport "${azCut(vp, 70)}"`);
     if (smallFs.length) ev.push(...names(smallFs.slice(0, 8), (f) => ` — chữ ${f.m.fs}px`));
-    put('M1', ev.length ? 'fail' : 'pass', ev.length ? `${smallFs.length} ô có chữ nhỏ hơn 16px${noZoom ? ', trang chặn phóng to' : ''}.` : 'Chữ trong ô từ 16px, không chặn phóng to.', ev, smallFs);
+    put('M1', ev.length ? 'fail' : 'pass', !ev.length ? 'Chữ trong ô từ 16px, không chặn phóng to.' : smallFs.length ? `${smallFs.length} ô có chữ nhỏ hơn 16px${noZoom ? ', trang còn chặn phóng to' : ''}.` : 'Trang chặn người dùng phóng to (maximum-scale=1 hoặc user-scalable=no): người mắt kém không phóng to được chữ.', ev, smallFs);
     smallFs.forEach((f) => flag(f, 'M1', 'fail', `Chữ trong ô ${f.m.fs}px: iPhone tự phóng to khi chạm vào, khó đọc trên điện thoại.`, 'Đặt [[font-size: 16px]] trở lên cho ô nhập.'));
   } else {
     const fsm = css.match(/(input|select|textarea)[^{]*\{[^}]*font-size\s*:\s*(\d+(\.\d+)?)px/i);
@@ -953,6 +957,30 @@ function azAnalyzePage(html, opt = {}) {
   else put('P2', contact ? 'pass' : 'warn', contact ? 'Có kênh liên hệ hỗ trợ trên trang.' : 'Không thấy email hoặc hotline hỗ trợ trên trang.');
   put('P3', 'manual', 'Kiểm tra trang xác nhận và email che bớt CCCD, số điện thoại.');
 
+  /* Trang xác nhận (chế độ gửi thật) */
+  if (opt.done) {
+    const ok = opt.success || (bodyText.match(/[^.!\n]{0,40}(thành công|cảm ơn|đã (nhận|ghi nhận|tiếp nhận)|thank you|successfully|đã được ghi lại)[^.!\n]{0,60}/i) || [''])[0];
+    const code = bodyText.match(/(mã (hồ sơ|đăng ký|dự thi|xác nhận|đơn|tham gia)|số báo danh|reference|confirmation (number|code))\s*[:#]?\s*([A-Z0-9][A-Z0-9-]{3,})/i);
+    const nextStep = /(bước tiếp theo|tiếp theo|sắp tới|công bố|thông báo kết quả|vòng (2|hai|sau|tiếp)|lịch|ngày \d{1,2}\/\d{1,2}|\d{1,2}\/\d{1,2}\/\d{4})/i.test(bodyText);
+    const support = /[\w.+-]+@[\w-]+\.[\w.]+|hotline|hỗ trợ|liên hệ/i.test(bodyText);
+    const miss = [!code && 'mã hồ sơ', !nextStep && 'bước tiếp theo (mốc thời gian)', !support && 'kênh hỗ trợ'].filter(Boolean);
+    if (!ok) put('K1', 'warn', 'Sau khi gửi, trang không có câu báo đăng ký thành công rõ ràng.', [azCut(bodyText, 160)]);
+    else put('K1', miss.length ? 'warn' : 'pass', miss.length ? `Có báo thành công ("${azCut(ok, 60)}") nhưng thiếu: ${miss.join(', ')}.` : `Trang xác nhận có báo thành công, mã hồ sơ ${code[4]}, bước tiếp theo và kênh hỗ trợ.`);
+    const mailed = /(đã gửi|gửi tới|gửi đến|kiểm tra) (một )?(email|thư|hộp thư|tin nhắn|sms)|check your (email|inbox)|sent (you )?an? (email|confirmation)/i.test(bodyText);
+    put('K2', mailed ? 'pass' : 'warn', mailed ? `Trang xác nhận nói đã gửi email/SMS. Kiểm tra hộp thư ${opt.profile ? opt.profile.email : ''} để chấm nội dung email.` : `Trang xác nhận không nói có gửi email/SMS. Kiểm tra hộp thư ${opt.profile ? opt.profile.email : 'của bạn'} xem có nhận được không.`);
+    const track = Array.from(doc.querySelectorAll('a, button')).some((a) => /(xem|tra cứu|theo dõi|quản lý|sửa) (lại )?(hồ sơ|đơn|đăng ký|trạng thái|bài)/i.test(azClean(a.textContent)));
+    put('K3', track ? 'pass' : 'manual', track ? 'Có liên kết xem hoặc tra cứu hồ sơ.' : 'Không thấy liên kết xem/tra cứu hồ sơ trên trang xác nhận. Kiểm tra trong email xác nhận.');
+    if (opt.profile) {
+      const digits = bodyText.replace(/[\s.]/g, '');
+      const ev = [];
+      const ph = String(opt.profile.phone || '').replace(/\D/g, '').replace(/^84/, '0');
+      if (ph.length >= 9 && digits.includes(ph)) ev.push(`Hiện đầy đủ số điện thoại ${ph.slice(0, 4)} *** ${ph.slice(-3)}`);
+      if (digits.includes('001203004567')) ev.push('Hiện đầy đủ số căn cước');
+      put('P3', ev.length ? 'warn' : 'pass', ev.length ? 'Trang xác nhận hiện lại dữ liệu nhạy cảm không che bớt.' : 'Trang xác nhận không hiện đầy đủ số điện thoại, số giấy tờ.', ev);
+    }
+    info.done = { ok: azCut(ok, 120), code: code ? code[4] : '' };
+  }
+
   /* Bản xem trước (khi không có ảnh chụp): đánh số từng ô, bỏ mọi script/khung nhúng */
   if (opt.preview) {
     fields.forEach((f) => (f.group || [f]).forEach((g) => g.el.setAttribute('data-az-i', String(f.n))));
@@ -974,7 +1002,9 @@ function azMerge(pages, labels) {
   RULES.forEach((r) => {
     const rs = pages.map((p, i) => ({ ...(p.R[r.id] || { st: 'na', msg: '', ev: [] }), i }));
     let pick;
-    if (AZ_ANY_PASS.has(r.id) && rs.some((x) => x.st === 'pass')) pick = rs.find((x) => x.st === 'pass');
+    const donePage = pages.findIndex((p) => p.info.done);
+    if (donePage >= 0 && ['K1', 'K2', 'K3', 'P3'].includes(r.id)) pick = rs[donePage];
+    else if (AZ_ANY_PASS.has(r.id) && rs.some((x) => x.st === 'pass')) pick = rs.find((x) => x.st === 'pass');
     else pick = rs.slice().sort((a, b) => ord[a.st] - ord[b.st])[0];
     /* Gom bằng chứng giống nhau giữa các bước: "Bước 1, Bước 2: …" thay vì lặp lại */
     const byText = new Map();
